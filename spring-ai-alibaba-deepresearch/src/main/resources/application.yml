@@ -1,6 +1,9 @@
 server:
   port: 8080
 spring:
+  profiles:
+    # LangFuse和可观测配置
+    include: observability
   application:
     name: spring-ai-alibaba-deepresearch
   # Redis 配置
@@ -28,22 +31,40 @@ spring:
     mcp:
       client:
         enabled: false
-        type: async
+        type: ASYNC
     alibaba:
       toolcalling:
+        baidu:
+          search:
+            enabled: true
         tavilysearch:
-          enabled: true
           api-key: ${TAVILY_API_KEY}
+          enabled: true
         jinacrawler:
           enabled: false
           api-key: ${JINA_API_KEY}
+        serpapi:
+          api-key: ${SERPAPI_KEY}
+          enabled: true
+        aliyunaisearch:
+          api-key: ${ALIYUN_AI_SEARCH_API_KEY}
+          base-url: ${ALIYUN_AI_SEARCH_BASE_URL}
+          enabled: true
       deepresearch:
+        # 图执行的最大迭代次数
+        max-iterations: 50
+        # 定义项目可以使用的搜索引擎
+        search-list:
+          - tavily
+          - aliyun
+          - baidu
+          - serpapi
         mcp:
           enabled: false
           config-location: classpath:mcp-config.json
         parallel-node-count:
-          researcher: 5
-          coder: 5
+          researcher: 4
+          coder: 4
         rag:
           enabled: false
           # 可以设置为 'simple' 或 'elasticsearch'
@@ -55,6 +76,11 @@ spring:
         # 报告导出路径配置
         export:
           path: ${AI_DEEPRESEARCH_EXPORT_PATH}
+        reflection:
+          enabled: true
+          max-attempts: 1
+
 logging:
   level:
     com.alibaba.cloud.ai.example.deepresearch: debug
+

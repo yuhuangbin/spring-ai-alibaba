@@ -15,10 +15,7 @@
  */
 package com.alibaba.cloud.ai.graph;
 
-import com.alibaba.cloud.ai.graph.action.AsyncCommandAction;
-import com.alibaba.cloud.ai.graph.action.AsyncNodeAction;
-import com.alibaba.cloud.ai.graph.action.AsyncNodeActionWithConfig;
-import com.alibaba.cloud.ai.graph.action.Command;
+import com.alibaba.cloud.ai.graph.action.*;
 import com.alibaba.cloud.ai.graph.async.AsyncGenerator;
 import com.alibaba.cloud.ai.graph.async.AsyncGeneratorQueue;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
@@ -430,8 +427,21 @@ public class StateGraphTest {
 
 		var result = app.stream(Map.of()).stream().peek(System.out::println).reduce((a, b) -> b).map(NodeOutput::state);
 		assertTrue(result.isPresent());
-		assertIterableEquals(List.of("A", "A1", "A2", "A3", "B", "C"),
-				(List<String>) result.get().value("messages").get());
+		List<String> messages = (List<String>) result.get().value("messages").get();
+		log.info("messages: {}", messages);
+
+		// 验证所有节点都被执行，但不关心并行节点的顺序
+		assertEquals("A", messages.get(0)); // A 应该是第一个
+		assertEquals("B", messages.get(messages.size() - 2)); // B 应该是倒数第二个
+		assertEquals("C", messages.get(messages.size() - 1)); // C 应该是最后一个
+
+		// 验证并行节点 A1, A2, A3 都在结果中
+		assertTrue(messages.contains("A1"), "A1 should be in the result");
+		assertTrue(messages.contains("A2"), "A2 should be in the result");
+		assertTrue(messages.contains("A3"), "A3 should be in the result");
+
+		// 验证总长度正确
+		assertEquals(6, messages.size(), "Should have 6 messages: A, A1, A2, A3, B, C");
 
 		workflow = new StateGraph(createKeyStrategyFactory()).addNode("A", makeNode("A"))
 			.addNode("A1", makeNode("A1"))
@@ -453,7 +463,19 @@ public class StateGraphTest {
 		result = app.stream(Map.of()).stream().peek(System.out::println).reduce((a, b) -> b).map(NodeOutput::state);
 
 		assertTrue(result.isPresent());
-		assertIterableEquals(List.of("A1", "A2", "A3", "B", "C"), (List<String>) result.get().value("messages").get());
+		List<String> messages2 = (List<String>) result.get().value("messages").get();
+
+		// 验证所有节点都被执行，但不关心并行节点的顺序
+		assertEquals("B", messages2.get(messages2.size() - 2)); // B 应该是倒数第二个
+		assertEquals("C", messages2.get(messages2.size() - 1)); // C 应该是最后一个
+
+		// 验证并行节点 A1, A2, A3 都在结果中
+		assertTrue(messages2.contains("A1"), "A1 should be in the result");
+		assertTrue(messages2.contains("A2"), "A2 should be in the result");
+		assertTrue(messages2.contains("A3"), "A3 should be in the result");
+
+		// 验证总长度正确
+		assertEquals(5, messages2.size(), "Should have 5 messages: A1, A2, A3, B, C");
 
 	}
 
@@ -661,22 +683,22 @@ public class StateGraphTest {
 		CompiledGraph app = workflow
 			.compile(CompileConfig.builder().withLifecycleListener(new GraphLifecycleListener() {
 				@Override
-				public void onComplete(String nodeId, Map<String, Object> state) {
+				public void onComplete(String nodeId, Map<String, Object> state, RunnableConfig config) {
 					log.info("listener1 ,node = {},state = {}", nodeId, state);
 				}
 
 				@Override
-				public void onStart(String nodeId, Map<String, Object> state) {
+				public void onStart(String nodeId, Map<String, Object> state, RunnableConfig config) {
 					log.info("listener1 ,node = {},state = {}", nodeId, state);
 				}
 			}).withLifecycleListener(new GraphLifecycleListener() {
 				@Override
-				public void onStart(String nodeId, Map<String, Object> state) {
+				public void onStart(String nodeId, Map<String, Object> state, RunnableConfig config) {
 					log.info("listener2 ,node = {},state = {}", nodeId, state);
 				}
 
 				@Override
-				public void onComplete(String nodeId, Map<String, Object> state) {
+				public void onComplete(String nodeId, Map<String, Object> state, RunnableConfig config) {
 					log.info("listener2 ,node = {},state = {}", nodeId, state);
 				}
 			}).build());
@@ -704,12 +726,12 @@ public class StateGraphTest {
 		CompiledGraph app = workflow
 			.compile(CompileConfig.builder().withLifecycleListener(new GraphLifecycleListener() {
 				@Override
-				public void onComplete(String nodeId, Map<String, Object> state) {
+				public void onComplete(String nodeId, Map<String, Object> state, RunnableConfig config) {
 					log.info("node = {},state = {}", nodeId, state);
 				}
 
 				@Override
-				public void onStart(String nodeId, Map<String, Object> state) {
+				public void onStart(String nodeId, Map<String, Object> state, RunnableConfig config) {
 					log.info("node = {},state = {}", nodeId, state);
 				}
 			}).build());
@@ -738,17 +760,17 @@ public class StateGraphTest {
 		CompiledGraph app = workflow
 			.compile(CompileConfig.builder().withLifecycleListener(new GraphLifecycleListener() {
 				@Override
-				public void onComplete(String nodeId, Map<String, Object> state) {
+				public void onComplete(String nodeId, Map<String, Object> state, RunnableConfig config) {
 					log.info("node = {},state = {}", nodeId, state);
 				}
 
 				@Override
-				public void onStart(String nodeId, Map<String, Object> state) {
+				public void onStart(String nodeId, Map<String, Object> state, RunnableConfig config) {
 					log.info("node = {},state = {}", nodeId, state);
 				}
 
 				@Override
-				public void onError(String nodeId, Map<String, Object> state, Throwable ex) {
+				public void onError(String nodeId, Map<String, Object> state, Throwable ex, RunnableConfig config) {
 					log.error("node = {},state = {}", nodeId, state, ex);
 				}
 			}).build());
@@ -759,24 +781,24 @@ public class StateGraphTest {
 
 	@Test
 	public void testCommandEdgeGraph() throws Exception {
-		StateGraph workflow = new StateGraph(() -> {
-			HashMap<String, KeyStrategy> keyStrategyHashMap = new HashMap<>();
-			keyStrategyHashMap.put("prop1", new ReplaceStrategy());
-			keyStrategyHashMap.put("input", new ReplaceStrategy());
-			return keyStrategyHashMap;
-		}).addNode("agent_1", node_async(state -> {
-			log.info("agent_1\n{}", state);
+		StateGraph workflow = new StateGraph(
+				() -> Map.of("prop1", new ReplaceStrategy(), "input", new ReplaceStrategy()))
 
-			return Map.of("prop1", "agent_1");
-		})).addNode("agent_2", node_async(state -> {
-			log.info("agent_2\n{}", state);
+			.addNode("agent_1", node_async(state -> {
+				log.info("agent_1\n{}", state);
 
-			return Map.of("prop1", "agent_2");
-		})).addNode("agent_3", node_async(state -> {
-			log.info("agent_3\n{}", state);
-			assertEquals("command content", state.value("prop1", String.class).get());
-			return Map.of("prop1", "agent_3");
-		}))
+				return Map.of("prop1", "agent_1");
+			}))
+			.addNode("agent_2", node_async(state -> {
+				log.info("agent_2\n{}", state);
+
+				return Map.of("prop1", "agent_2");
+			}))
+			.addNode("agent_3", node_async(state -> {
+				log.info("agent_3\n{}", state);
+				assertEquals("command content", state.value("prop1", String.class).get());
+				return Map.of("prop1", "agent_3");
+			}))
 			.addConditionalEdges("agent_2",
 					AsyncCommandAction
 						.node_async((state, config) -> new Command("agent_2", Map.of("prop1", "command content"))),
@@ -786,6 +808,37 @@ public class StateGraphTest {
 			.addEdge("agent_1", "agent_2");
 		CompiledGraph compile = workflow.compile();
 		compile.invoke(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1"));
+	}
+
+	@Test
+	public void testCommandNodeGraph() throws Exception {
+		StateGraph graph = new StateGraph(() -> {
+			HashMap<String, KeyStrategy> stringKeyStrategyHashMap = new HashMap<>();
+			stringKeyStrategyHashMap.put("messages", new AppendStrategy());
+			return stringKeyStrategyHashMap;
+		});
+
+		CommandAction commandAction = (state, config) -> new Command("node1", Map.of("messages", "go to command node"));
+		graph.addNode("testCommandNode", AsyncCommandAction.node_async(commandAction),
+				Map.of("node1", "node1", "node2", "node2"));
+
+		graph.addNode("node1", makeNode("node1"));
+		graph.addNode("node2", makeNode("node2"));
+
+		graph.addEdge(START, "testCommandNode");
+		graph.addEdge("node1", "node2");
+		graph.addEdge("node2", END);
+
+		CompiledGraph compile = graph.compile();
+		String plantuml = compile.getGraph(GraphRepresentation.Type.PLANTUML).content();
+		String mermaid = compile.getGraph(GraphRepresentation.Type.MERMAID).content();
+		System.out.println("===============plantuml===============");
+		System.out.println(plantuml);
+		System.out.println("===============mermaid===============");
+		System.out.println(mermaid);
+
+		OverAllState state = compile.invoke(Map.of()).orElseThrow();
+		assertEquals(List.of("go to command node", "node1", "node2"), state.value("messages", List.class).get());
 	}
 
 }

@@ -16,12 +16,37 @@ import java.util.Map;
 
 import static com.alibaba.cloud.ai.graph.StateGraph.END;
 import static com.alibaba.cloud.ai.graph.StateGraph.START;
+{{importSection}}
+
+{{#hasRetriever}}
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.reader.TextReader;
+import org.springframework.ai.transformer.splitter.TokenTextSplitter;
+import org.springframework.ai.vectorstore.SimpleVectorStore;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+{{/hasRetriever}}
+
+{{#hasCode}}
+import com.alibaba.cloud.ai.graph.node.code.entity.CodeExecutionConfig;
+import com.alibaba.cloud.ai.graph.node.code.CodeExecutor;
+{{/hasCode}}
 
 @Component
 public class GraphBuilder {
+    {{#hasRetriever}}
+    // todo: add your knowledge base
+    @Value("${rag.source:classpath:${}")
+    private Resource ragSource;
+    {{/hasRetriever}}
 
     @Bean
-    public CompiledGraph buildGraph(ChatModel chatModel) throws GraphStateException {
+    public CompiledGraph buildGraph(
+        ChatModel chatModel
+        {{#hasRetriever}}, VectorStore vectorStore{{/hasRetriever}}
+        {{#hasCode}}, CodeExecutionConfig codeExecutionConfig, CodeExecutor codeExecutor{{/hasCode}}
+        ) throws GraphStateException {
         ChatClient chatClient = ChatClient.builder(chatModel).defaultAdvisors(new SimpleLoggerAdvisor()).build();
 
         // new stateGraph
@@ -32,4 +57,37 @@ public class GraphBuilder {
         {{edgeSection}}
         return stateGraph.compile();
     }
+
+    {{#hasRetriever}}
+        @Bean
+        public VectorStore customVectorStore(EmbeddingModel embeddingModel) {
+            var chunks = new TokenTextSplitter()
+                .transform(new TextReader(ragSource).read());
+            SimpleVectorStore vectorStore = SimpleVectorStore
+                .builder(embeddingModel)
+                .build();
+            vectorStore.write(chunks);
+            return vectorStore;
+        }
+    {{/hasRetriever}}
+
+    {{#hasCode}}
+        @Bean
+    	public Path tempDir() throws IOException {
+    	    // todo： set your work dir
+    		Path tempDir = Files.createTempDirectory("code-execution-workdir-");
+    		tempDir.toFile().deleteOnExit();
+    		return tempDir;
+    	}
+
+    	@Bean
+    	public CodeExecutionConfig codeExecutionConfig(Path tempDir) {
+    		return new CodeExecutionConfig().setWorkDir(tempDir.toString());
+    	}
+
+    	@Bean
+    	public CodeExecutor codeGenerator() {
+    		return new LocalCommandlineCodeExecutor();
+    	}
+    {{/hasCode}}
 }
