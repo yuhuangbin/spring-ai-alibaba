@@ -17,6 +17,8 @@ package com.alibaba.cloud.ai.example.manus.dynamic.model.controller;
 
 import com.alibaba.cloud.ai.example.manus.dynamic.model.model.enums.ModelType;
 import com.alibaba.cloud.ai.example.manus.dynamic.model.model.vo.ModelConfig;
+import com.alibaba.cloud.ai.example.manus.dynamic.model.model.vo.ValidationRequest;
+import com.alibaba.cloud.ai.example.manus.dynamic.model.model.vo.ValidationResult;
 import com.alibaba.cloud.ai.example.manus.dynamic.model.service.ModelService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -52,7 +54,12 @@ public class ModelController {
 	@PutMapping("/{id}")
 	public ResponseEntity<ModelConfig> updateModel(@PathVariable("id") Long id, @RequestBody ModelConfig modelConfig) {
 		modelConfig.setId(id);
-		return ResponseEntity.ok(modelService.updateModel(modelConfig));
+		try {
+			return ResponseEntity.ok(modelService.updateModel(modelConfig));
+		}
+		catch (UnsupportedOperationException e) {
+			return ResponseEntity.status(499).build();
+		}
 	}
 
 	@DeleteMapping("/{id}")
@@ -64,11 +71,28 @@ public class ModelController {
 		catch (IllegalArgumentException e) {
 			return ResponseEntity.badRequest().build();
 		}
+		catch (UnsupportedOperationException e) {
+			return ResponseEntity.status(499).build();
+		}
 	}
 
 	@GetMapping("/types")
 	public ResponseEntity<List<String>> getAllModelTypes() {
 		return ResponseEntity.ok(Arrays.stream(ModelType.values()).map(Enum::name).collect(Collectors.toList()));
+	}
+
+	@PostMapping("/validate")
+	public ResponseEntity<ValidationResult> validateConfig(@RequestBody ValidationRequest request) {
+		try {
+			ValidationResult result = modelService.validateConfig(request.getBaseUrl(), request.getApiKey());
+			return ResponseEntity.ok(result);
+		}
+		catch (Exception e) {
+			ValidationResult errorResult = new ValidationResult();
+			errorResult.setValid(false);
+			errorResult.setMessage("验证失败: " + e.getMessage());
+			return ResponseEntity.ok(errorResult);
+		}
 	}
 
 }

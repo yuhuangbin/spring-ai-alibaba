@@ -17,6 +17,7 @@
 // Define interface types
 export interface Model {
     id: string
+    headers: Headers | null
     baseUrl: string
     apiKey: string
     modelName: string
@@ -24,10 +25,26 @@ export interface Model {
     type: string
 }
 
+export interface Headers {
+    key: string
+    value: string
+}
+
 export interface ApiResponse<T> {
     success: boolean
     data?: T
     message?: string
+}
+
+export interface ValidationRequest {
+    baseUrl: string
+    apiKey: string
+}
+
+export interface ValidationResult {
+    valid: boolean
+    message?: string
+    availableModels?: Model[]
 }
 
 /**
@@ -126,6 +143,9 @@ export class ModelApiService {
                 },
                 body: JSON.stringify(modelConfig)
             })
+            if (response.status === 499) {
+                throw new Error('Request rejected, please modify the model configuration in the configuration file')
+            }
             const result = await this.handleResponse(response)
             return await result.json()
         } catch (error) {
@@ -145,6 +165,9 @@ export class ModelApiService {
             if (response.status === 400) {
                 throw new Error('Cannot delete default Model')
             }
+            if (response.status === 499) {
+                throw new Error('Request rejected, please modify the model configuration in the configuration file')
+            }
             await this.handleResponse(response)
         } catch (error) {
             console.error(`Failed to delete Model[${id}]:`, error)
@@ -152,6 +175,25 @@ export class ModelApiService {
         }
     }
 
+    /**
+     * Validate model configuration
+     */
+    static async validateConfig(request: ValidationRequest): Promise<ValidationResult> {
+        try {
+            const response = await fetch(`${this.BASE_URL}/validate`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(request)
+            })
+            const result = await this.handleResponse(response)
+            return await result.json()
+        } catch (error) {
+            console.error('Failed to validate model configuration:', error)
+            throw error
+        }
+    }
 }
 
 /**
