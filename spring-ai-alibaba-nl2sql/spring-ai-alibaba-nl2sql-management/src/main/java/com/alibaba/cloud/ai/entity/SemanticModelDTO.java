@@ -16,52 +16,61 @@
 package com.alibaba.cloud.ai.entity;
 
 /**
- * 语义模型配置实体类
+ * Semantic Model Configuration Entity Class
  */
 public class SemanticModelDTO {
 
-	private String datasetId; // 数据集ID
+	private Long id; // Unique identifier
 
-	private String originalFieldName; // 原始字段名
+	private Long agentId; // Agent ID
 
-	private String agentFieldName; // 智能体字段名称
+	private String originalFieldName; // Original field name
 
-	private String fieldSynonyms; // 字段名称同义词，逗号分隔
+	private String agentFieldName; // Agent field name
 
-	private String fieldDescription; // 字段描述
+	private String fieldSynonyms; // Field name synonyms, comma separated
 
-	private Boolean defaultRecall; // 默认召回
+	private String fieldDescription; // Field description
 
-	private Boolean enabled; // 是否启用
+	private String fieldType; // Field type
 
-	private String fieldType; // 字段类型
+	private String originalDescription; // Original field description
 
-	private String originalDescription; // 原始字段描述
+	private Boolean defaultRecall; // Default recall
+
+	private Boolean enabled; // Whether enabled
 
 	public SemanticModelDTO() {
 	}
 
-	public SemanticModelDTO(String datasetId, String originalFieldName, String agentFieldName, String fieldSynonyms,
-			String fieldDescription, Boolean defaultRecall, Boolean enabled, String fieldType,
-			String originalDescription) {
-		this.datasetId = datasetId;
+	public SemanticModelDTO(String originalFieldName, String agentFieldName, String fieldSynonyms,
+			String fieldDescription, String fieldType, String originalDescription, Boolean defaultRecall,
+			Boolean enabled) {
 		this.originalFieldName = originalFieldName;
 		this.agentFieldName = agentFieldName;
 		this.fieldSynonyms = fieldSynonyms;
 		this.fieldDescription = fieldDescription;
-		this.defaultRecall = defaultRecall;
-		this.enabled = enabled;
 		this.fieldType = fieldType;
 		this.originalDescription = originalDescription;
+		this.defaultRecall = defaultRecall;
+		this.enabled = enabled;
 	}
 
 	// Getters and Setters
-	public String getDatasetId() {
-		return datasetId;
+	public Long getId() {
+		return id;
 	}
 
-	public void setDatasetId(String datasetId) {
-		this.datasetId = datasetId;
+	public void setId(Long id) {
+		this.id = id;
+	}
+
+	public Long getAgentId() {
+		return agentId;
+	}
+
+	public void setAgentId(Long agentId) {
+		this.agentId = agentId;
 	}
 
 	public String getOriginalFieldName() {
@@ -96,22 +105,6 @@ public class SemanticModelDTO {
 		this.fieldDescription = fieldDescription;
 	}
 
-	public Boolean getDefaultRecall() {
-		return defaultRecall;
-	}
-
-	public void setDefaultRecall(Boolean defaultRecall) {
-		this.defaultRecall = defaultRecall;
-	}
-
-	public Boolean getEnabled() {
-		return enabled;
-	}
-
-	public void setEnabled(Boolean enabled) {
-		this.enabled = enabled;
-	}
-
 	public String getFieldType() {
 		return fieldType;
 	}
@@ -126,6 +119,22 @@ public class SemanticModelDTO {
 
 	public void setOriginalDescription(String originalDescription) {
 		this.originalDescription = originalDescription;
+	}
+
+	public Boolean getDefaultRecall() {
+		return defaultRecall;
+	}
+
+	public void setDefaultRecall(Boolean defaultRecall) {
+		this.defaultRecall = defaultRecall;
+	}
+
+	public Boolean getEnabled() {
+		return enabled;
+	}
+
+	public void setEnabled(Boolean enabled) {
+		this.enabled = enabled;
 	}
 
 }

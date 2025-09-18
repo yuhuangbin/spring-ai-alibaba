@@ -16,12 +16,17 @@
 
 package com.alibaba.cloud.ai.node;
 
+import com.alibaba.cloud.ai.constant.Constant;
+import com.alibaba.cloud.ai.dto.BusinessKnowledgeDTO;
+import com.alibaba.cloud.ai.dto.SemanticModelDTO;
 import com.alibaba.cloud.ai.dto.schema.SchemaDTO;
 import com.alibaba.cloud.ai.enums.StreamResponseType;
 import com.alibaba.cloud.ai.graph.OverAllState;
 import com.alibaba.cloud.ai.graph.action.NodeAction;
 import com.alibaba.cloud.ai.service.base.BaseNl2SqlService;
 import com.alibaba.cloud.ai.service.base.BaseSchemaService;
+import com.alibaba.cloud.ai.service.business.BusinessKnowledgeRecallService;
+import com.alibaba.cloud.ai.service.semantic.SemanticModelRecallService;
 import com.alibaba.cloud.ai.util.ChatResponseUtil;
 import com.alibaba.cloud.ai.util.StateUtils;
 import com.alibaba.cloud.ai.util.StreamingChatGeneratorUtil;
@@ -29,17 +34,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.document.Document;
+import org.springframework.dao.DataAccessException;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
 import java.util.Map;
 
-import static com.alibaba.cloud.ai.constant.Constant.COLUMN_DOCUMENTS_BY_KEYWORDS_OUTPUT;
-import static com.alibaba.cloud.ai.constant.Constant.EVIDENCES;
-import static com.alibaba.cloud.ai.constant.Constant.INPUT_KEY;
-import static com.alibaba.cloud.ai.constant.Constant.SQL_GENERATE_SCHEMA_MISSING_ADVICE;
-import static com.alibaba.cloud.ai.constant.Constant.TABLE_DOCUMENTS_FOR_SCHEMA_OUTPUT;
-import static com.alibaba.cloud.ai.constant.Constant.TABLE_RELATION_OUTPUT;
+import static com.alibaba.cloud.ai.constant.Constant.*;
+import static com.alibaba.cloud.ai.prompt.PromptHelper.buildBusinessKnowledgePrompt;
+import static com.alibaba.cloud.ai.prompt.PromptHelper.buildSemanticModelPrompt;
 
 /**
  * Table relationship inference node that automatically completes complex structures like
@@ -59,14 +62,24 @@ public class TableRelationNode implements NodeAction {
 
 	private final BaseNl2SqlService baseNl2SqlService;
 
-	public TableRelationNode(BaseSchemaService baseSchemaService, BaseNl2SqlService baseNl2SqlService) {
+	private final BusinessKnowledgeRecallService businessKnowledgeRecallService;
+
+	private final SemanticModelRecallService semanticModelRecallService;
+
+	public TableRelationNode(BaseSchemaService baseSchemaService, BaseNl2SqlService baseNl2SqlService,
+			BusinessKnowledgeRecallService businessKnowledgeRecallService,
+			SemanticModelRecallService semanticModelRecallService) {
 		this.baseSchemaService = baseSchemaService;
 		this.baseNl2SqlService = baseNl2SqlService;
+		this.businessKnowledgeRecallService = businessKnowledgeRecallService;
+		this.semanticModelRecallService = semanticModelRecallService;
 	}
 
 	@Override
 	public Map<String, Object> apply(OverAllState state) throws Exception {
 		logger.info("Entering {} node", this.getClass().getSimpleName());
+
+		int retryCount = StateUtils.getObjectValue(state, TABLE_RELATION_RETRY_COUNT, Integer.class, 0);
 
 		// Get necessary input parameters
 		String input = StateUtils.getStringValue(state, INPUT_KEY);
@@ -74,29 +87,69 @@ public class TableRelationNode implements NodeAction {
 		List<Document> tableDocuments = StateUtils.getDocumentList(state, TABLE_DOCUMENTS_FOR_SCHEMA_OUTPUT);
 		List<List<Document>> columnDocumentsByKeywords = StateUtils.getDocumentListList(state,
 				COLUMN_DOCUMENTS_BY_KEYWORDS_OUTPUT);
+		String dataSetId = StateUtils.getStringValue(state, Constant.AGENT_ID);
+		String agentIdStr = StateUtils.getStringValue(state, AGENT_ID);
+		long agentId = -1L;
+		if (!agentIdStr.isEmpty()) {
+			agentId = Long.parseLong(agentIdStr);
+		}
 
 		// Execute business logic first - get final result immediately
 		SchemaDTO schemaDTO = buildInitialSchema(columnDocumentsByKeywords, tableDocuments);
 		SchemaDTO result = processSchemaSelection(schemaDTO, input, evidenceList, state);
 
+		List<BusinessKnowledgeDTO> businessKnowledges;
+		List<SemanticModelDTO> semanticModel;
+		try {
+			// Extract business knowledge and semantic model
+			businessKnowledges = businessKnowledgeRecallService.getFieldByDataSetId(dataSetId);
+			semanticModel = semanticModelRecallService.getFieldByDataSetId(String.valueOf(agentId));
+		}
+		catch (DataAccessException e) {
+			logger.warn("Database query failed (attempt {}): {}", retryCount + 1, e.getMessage());
+
+			String errorType = classifyDatabaseError(e);
+			return Map.of(TABLE_RELATION_EXCEPTION_OUTPUT, errorType + ": " + e.getMessage(),
+					TABLE_RELATION_RETRY_COUNT, retryCount + 1);
+		}
+		// load prompt template
+		String businessKnowledgePrompt = buildBusinessKnowledgePrompt(businessKnowledges);
+		String semanticModelPrompt = buildSemanticModelPrompt(semanticModel);
+
 		logger.info("[{}] Schema processing result: {}", this.getClass().getSimpleName(), result);
 
 		// Create display stream for user experience only
 		Flux<ChatResponse> displayFlux = Flux.create(emitter -> {
-			emitter.next(ChatResponseUtil.createCustomStatusResponse("开始构建初始Schema..."));
-			emitter.next(ChatResponseUtil.createCustomStatusResponse("初始Schema构建完成."));
+			emitter.next(ChatResponseUtil.createStatusResponse("开始构建初始Schema..."));
+			emitter.next(ChatResponseUtil.createStatusResponse("初始Schema构建完成."));
 
-			emitter.next(ChatResponseUtil.createCustomStatusResponse("开始处理Schema选择..."));
-			emitter.next(ChatResponseUtil.createCustomStatusResponse("Schema选择处理完成."));
+			emitter.next(ChatResponseUtil.createStatusResponse("开始处理Schema选择..."));
+			emitter.next(ChatResponseUtil.createStatusResponse("Schema选择处理完成."));
 			emitter.complete();
 		});
 
 		// Use utility class to create generator, directly return business logic computed
 		// result
-		var generator = StreamingChatGeneratorUtil.createStreamingGeneratorWithMessages(this.getClass(), state,
-				v -> Map.of(TABLE_RELATION_OUTPUT, result), displayFlux, StreamResponseType.SCHEMA_DEEP_RECALL);
+		var generator = StreamingChatGeneratorUtil.createStreamingGeneratorWithMessages(
+				this.getClass(), state, v -> Map.of(TABLE_RELATION_OUTPUT, result, BUSINESS_KNOWLEDGE,
+						businessKnowledgePrompt, SEMANTIC_MODEL, semanticModelPrompt),
+				displayFlux, StreamResponseType.SCHEMA_DEEP_RECALL);
 
-		return Map.of(TABLE_RELATION_OUTPUT, generator);
+		// need to reset retry count and exception
+		return Map.of(TABLE_RELATION_OUTPUT, generator, BUSINESS_KNOWLEDGE, businessKnowledgePrompt, SEMANTIC_MODEL,
+				semanticModelPrompt, TABLE_RELATION_RETRY_COUNT, 0, TABLE_RELATION_EXCEPTION_OUTPUT, "");
+
+	}
+
+	private String classifyDatabaseError(DataAccessException e) {
+		String message = e.getMessage();
+		if (message != null) {
+			// timeout, connection, network can be retried
+			if (message.contains("timeout") || message.contains("connection") || message.contains("network")) {
+				return "RETRYABLE";
+			}
+		}
+		return "NON_RETRYABLE";
 	}
 
 	/**

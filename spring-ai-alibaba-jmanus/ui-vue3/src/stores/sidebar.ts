@@ -36,6 +36,7 @@ export class SidebarStore {
 
   // Configuration related state
   jsonContent = ''
+  planType = 'dynamic_agent'
   generatorPrompt = ''
   executionParams = ''
   isGenerating = false
@@ -45,22 +46,60 @@ export class SidebarStore {
   planVersions: string[] = []
   currentVersionIndex = -1
 
+  // Available tools state
+  availableTools: Array<{
+    key: string
+    name: string
+    description: string
+    enabled: boolean
+    serviceGroup?: string
+  }> = []
+  isLoadingTools = false
+  toolsLoadError = ''
+
+  constructor() {
+    // Ensure properties are properly initialized
+    this.planVersions = []
+    this.currentVersionIndex = -1
+  }
+
+  // Helper function to parse date from different formats
+  parseDateTime(dateValue: any): Date {
+    if (!dateValue) {
+      return new Date()
+    }
+
+    // If array format [year, month, day, hour, minute, second, nanosecond]
+    if (Array.isArray(dateValue) && dateValue.length >= 6) {
+      // JavaScript Date constructor months start from 0, so subtract 1
+      return new Date(dateValue[0], dateValue[1] - 1, dateValue[2], dateValue[3], dateValue[4], dateValue[5], Math.floor(dateValue[6] / 1000000))
+    }
+
+    // If string format, parse directly
+    if (typeof dateValue === 'string') {
+      return new Date(dateValue)
+    }
+
+    // Return current time for other cases
+    return new Date()
+  }
+
   // Computed properties
   get sortedTemplates(): PlanTemplate[] {
     return [...this.planTemplateList].sort((a, b) => {
-      const timeA = new Date(a.updateTime ?? a.createTime)
-      const timeB = new Date(b.updateTime ?? b.createTime)
+      const timeA = this.parseDateTime(a.updateTime ?? a.createTime)
+      const timeB = this.parseDateTime(b.updateTime ?? b.createTime)
       return timeB.getTime() - timeA.getTime()
     })
   }
 
   get canRollback(): boolean {
-    return this.planVersions.length > 1 && this.currentVersionIndex > 0
+    return this.planVersions && this.planVersions.length > 1 && this.currentVersionIndex > 0
   }
 
   get canRestore(): boolean {
     return (
-      this.planVersions.length > 1 && this.currentVersionIndex < this.planVersions.length - 1
+      this.planVersions && this.planVersions.length > 1 && this.currentVersionIndex < this.planVersions.length - 1
     )
   }
 
@@ -68,7 +107,7 @@ export class SidebarStore {
   if (!this.selectedTemplate) return ''
   const baseUrl = `/api/plan-template/execute/${this.selectedTemplate.id}`
   const params = this.executionParams.trim()
-  // GET 方式，参数名为 allParams
+  // GET method, parameter name is allParams
   return params ? `${baseUrl}?allParams=${encodeURIComponent(params)}` : baseUrl
   }
 
@@ -127,6 +166,11 @@ export class SidebarStore {
           if (parsed.params) {
             this.executionParams = parsed.params
           }
+          // Update planType based on the loaded template's JSON content
+          if (parsed.planType) {
+            this.planType = parsed.planType
+            console.log(`[SidebarStore] Updated planType to: ${this.planType}`)
+          }
         } catch {
           console.warn('Unable to parse JSON content to get prompt information')
         }
@@ -134,6 +178,7 @@ export class SidebarStore {
         this.jsonContent = ''
         this.generatorPrompt = ''
         this.executionParams = ''
+        this.planType = 'dynamic_agent'
       }
     } catch (error: any) {
       console.error('Failed to load template data:', error)
@@ -141,7 +186,7 @@ export class SidebarStore {
     }
   }
 
-  createNewTemplate() {
+  createNewTemplate(planType: string) {
     const emptyTemplate: PlanTemplate = {
       id: `new-${Date.now()}`,
       title: i18n.global.t('sidebar.newTemplateName'),
@@ -157,6 +202,8 @@ export class SidebarStore {
     this.planVersions = []
     this.currentVersionIndex = -1
     this.currentTab = 'config'
+    // Reset to default planType for new templates
+    this.planType = planType
     console.log('[SidebarStore] Created new empty plan template, switching to config tab')
   }
 
@@ -195,16 +242,16 @@ export class SidebarStore {
   }
 
   rollbackVersion() {
-    if (this.canRollback) {
+    if (this.canRollback && this.planVersions && this.currentVersionIndex > 0) {
       this.currentVersionIndex--
-      this.jsonContent = this.planVersions[this.currentVersionIndex]
+      this.jsonContent = this.planVersions[this.currentVersionIndex] || ''
     }
   }
 
   restoreVersion() {
-    if (this.canRestore) {
+    if (this.canRestore && this.planVersions && this.currentVersionIndex < this.planVersions.length - 1) {
       this.currentVersionIndex++
-      this.jsonContent = this.planVersions[this.currentVersionIndex]
+      this.jsonContent = this.planVersions[this.currentVersionIndex] || ''
     }
   }
 
@@ -224,6 +271,14 @@ export class SidebarStore {
         this.selectedTemplate.id,
         content
       )
+      
+      // Update the selected template ID with the real planId returned from backend
+      if (saveResult?.planId && this.selectedTemplate.id.startsWith('new-')) {
+        console.log('[SidebarStore] Updating template ID from', this.selectedTemplate.id, 'to', saveResult.planId)
+        this.selectedTemplate.id = saveResult.planId
+        this.currentPlanTemplateId = saveResult.planId
+      }
+      
       if (this.currentVersionIndex < this.planVersions.length - 1) {
         this.planVersions = this.planVersions.slice(0, this.currentVersionIndex + 1)
       }
@@ -240,7 +295,7 @@ export class SidebarStore {
     if (!this.generatorPrompt.trim()) return
     this.isGenerating = true
     try {
-      const response = await PlanActApiService.generatePlan(this.generatorPrompt)
+      const response = await PlanActApiService.generatePlan(this.generatorPrompt, undefined, this.planType)
       this.jsonContent = response.planJson || ''
       if (this.selectedTemplate && this.selectedTemplate.id.startsWith('new-')) {
         let title = 'New Plan Template'
@@ -283,7 +338,8 @@ export class SidebarStore {
       const response = await PlanActApiService.updatePlanTemplate(
         this.selectedTemplate.id,
         this.generatorPrompt,
-        this.jsonContent
+        this.jsonContent,
+        this.planType
       )
       this.jsonContent = response.planJson || ''
       if (this.currentVersionIndex < this.planVersions.length - 1) {
@@ -311,13 +367,12 @@ export class SidebarStore {
       } catch {
         planData = {
           planTemplateId: this.selectedTemplate.id,
-          planId: this.selectedTemplate.id,
           title: this.selectedTemplate.title ?? i18n.global.t('sidebar.defaultExecutionPlanTitle'),
           steps: [
-            { stepRequirement: '[BROWSER_AGENT] 访问百度搜索阿里巴巴的最新股价' },
-            { stepRequirement: '[DEFAULT_AGENT] 提取和整理搜索结果中的股价信息' },
-            { stepRequirement: '[TEXT_FILE_AGENT] 创建一个文本文件记录查询结果' },
-            { stepRequirement: '[DEFAULT_AGENT] 向用户报告查询结果' },
+            { stepRequirement: '[BROWSER_AGENT] Visit Baidu to search for Alibaba\'s latest stock price' },
+            { stepRequirement: '[DEFAULT_AGENT] Extract and organize stock price information from search results' },
+            { stepRequirement: '[TEXT_FILE_AGENT] Create a text file to record query results' },
+            { stepRequirement: '[DEFAULT_AGENT] Report query results to user' },
           ],
         }
       }
@@ -326,6 +381,7 @@ export class SidebarStore {
         title,
         planData,
         params: this.executionParams.trim() || undefined,
+        replacementParams: undefined as Record<string, string> | undefined
       }
     } catch (error: any) {
       console.error('Failed to prepare plan execution:', error)
@@ -336,6 +392,37 @@ export class SidebarStore {
 
   finishPlanExecution() {
     this.isExecuting = false
+  }
+
+  // Load available tools from backend
+  async loadAvailableTools() {
+    if (this.isLoadingTools) {
+      return // Avoid duplicate requests
+    }
+
+    this.isLoadingTools = true
+    this.toolsLoadError = ''
+
+    try {
+      console.log('[SidebarStore] Loading available tools...')
+      const response = await fetch('/api/agents/tools')
+      
+      if (response.ok) {
+        const tools = await response.json()
+        console.log('[SidebarStore] Loaded available tools:', tools)
+        this.availableTools = tools
+      } else {
+        console.error('[SidebarStore] Failed to load tools:', response.statusText)
+        this.toolsLoadError = `Failed to load tools: ${response.statusText}`
+        this.availableTools = []
+      }
+    } catch (error) {
+      console.error('[SidebarStore] Error loading tools:', error)
+      this.toolsLoadError = error instanceof Error ? error.message : 'Unknown error'
+      this.availableTools = []
+    } finally {
+      this.isLoadingTools = false
+    }
   }
 }
 

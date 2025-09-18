@@ -35,7 +35,7 @@
           </div>
           <div class="modal-content">
             <form @submit.prevent="handleSave" class="task-form">
-              <!-- 任务名称 -->
+              <!-- Task Name -->
               <div class="form-group">
                 <label class="form-label">{{ $t('cronTask.taskName') }}</label>
                 <input
@@ -47,7 +47,7 @@
                 />
               </div>
 
-              <!-- Cron表达式 -->
+              <!-- Cron Expression -->
               <div class="form-group">
                 <label class="form-label">{{ $t('cronTask.cronExpression') }}</label>
                 <input
@@ -62,7 +62,7 @@
                 </div>
               </div>
 
-              <!-- 任务描述 -->
+              <!-- Task Description -->
               <div class="form-group">
                 <label class="form-label">{{ $t('cronTask.taskDescription') }}</label>
                 <textarea
@@ -74,7 +74,7 @@
                 ></textarea>
               </div>
 
-              <!-- 计划模板关联 -->
+              <!-- Plan Template Association -->
               <div class="form-group">
                 <label class="form-label">{{ $t('cronTask.planTemplate') }}</label>
                 <div class="template-toggle">
@@ -111,7 +111,7 @@
                 </div>
               </div>
 
-              <!-- 任务信息（只读） -->
+              <!-- Task Information (Read-only) -->
               <div v-if="task?.createTime" class="form-group">
                 <div class="time-info">
                   <span class="time-label">{{ $t('cronTask.createTime') }}:</span>
@@ -143,7 +143,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { CronConfig } from '@/types/cron-task'
 import { PlanActApiService } from '@/api/plan-act-api-service'
@@ -160,11 +160,11 @@ const emit = defineEmits<{
   'save': [task: CronConfig]
 }>()
 
-// 状态变量
+// State variables
 const saving = ref(false)
 const templates = ref<Array<{id: string, name: string}>>([])
 
-// 表单数据
+// Form data
 const formData = ref<CronConfig>({
   cronName: '',
   cronTime: '',
@@ -192,7 +192,21 @@ const fetchTemplates = async () => {
   }
 }
 
-onMounted(fetchTemplates)
+// Handle ESC key to close modal
+const handleEscKey = (e: KeyboardEvent) => {
+  if (e.key === 'Escape' && props.modelValue) {
+    emit('update:modelValue', false)
+  }
+}
+
+onMounted(() => {
+  fetchTemplates()
+  document.addEventListener('keydown', handleEscKey)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleEscKey)
+})
 
 /**
  * Handle click on modal overlay area

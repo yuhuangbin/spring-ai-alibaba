@@ -19,9 +19,9 @@
 <template>
   <div class="direct-page">
     <div class="direct-chat">
-      <Sidebar @planExecutionRequested="handlePlanExecutionRequested" />
+      <Sidebar ref="sidebarRef" @planExecutionRequested="handlePlanExecutionRequested" />
       <!-- Left Panel - Chat -->
-      <div class="left-panel" :style="{ width: leftPanelWidth + '%' }">
+      <div class="left-panel" :style="{ width: computedLeftPanelWidth + '%' }">
         <div class="chat-header">
           <button class="back-button" @click="goBack">
             <Icon icon="carbon:arrow-left" />
@@ -29,11 +29,17 @@
           <h2>{{ $t('conversation') }}</h2>
           <div class="header-actions">
             <LanguageSwitcher />
+            <button class="config-button" @click="newChat" :title="$t('memory.newChat')">
+              <Icon icon="carbon:add" width="20" />
+            </button>
             <button class="config-button" @click="handleConfig" :title="$t('direct.configuration')">
               <Icon icon="carbon:settings-adjust" width="20" />
             </button>
             <button class="cron-task-btn" @click="showCronTaskModal = true" :title="$t('cronTask.title')">
               <Icon icon="carbon:alarm" width="20" />
+            </button>
+            <button class="cron-task-btn" @click="memoryStore.toggleSidebar()" :title="$t('memory.selectMemory')">
+              <Icon icon="carbon:calendar" width="20" />
             </button>
           </div>
         </div>
@@ -75,40 +81,59 @@
       </div>
 
       <!-- Right Panel - Preview -->
-      <RightPanel ref="rightPanelRef" :style="{ width: 100 - leftPanelWidth + '%' }" />
+      <RightPanel ref="rightPanelRef" :style="{ width: 100 - leftPanelWidth + '%' }" :current-root-plan-id="currentRootPlanId" />
     </div>
 
     <!-- Cron Task Modal -->
     <CronTaskModal v-model="showCronTaskModal" />
+
+    <!-- Memory Modal -->
+    <Memory
+        @memory-selected="memorySelected"
+    />
+
+    <!-- Message toast component -->
+    <div v-if="message.show" class="message-toast" :class="message.type">
+      <div class="message-content">
+        <span>{{ message.text }}</span>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
-import Sidebar from '@/components/sidebar/index.vue'
-import RightPanel from '@/components/right-panel/index.vue'
-import ChatContainer from '@/components/chat/index.vue'
-import InputArea from '@/components/input/index.vue'
-import LanguageSwitcher from '@/components/language-switcher/index.vue'
-import CronTaskModal from '@/components/cron-task-modal/index.vue'
+import Sidebar from '@/components/sidebar/Sidebar.vue'
+import Memory from '@/components/memory/Memory.vue'
+import RightPanel from '@/components/right-panel/RightPanel.vue'
+import ChatContainer from '@/components/chat/ChatContainer.vue'
+import InputArea from '@/components/input/InputArea.vue'
+import LanguageSwitcher from '@/components/language-switcher/LanguageSwitcher.vue'
+import CronTaskModal from '@/components/cron-task-modal/CronTaskModal.vue'
 import { PlanActApiService } from '@/api/plan-act-api-service'
 import { useTaskStore } from '@/stores/task'
 import { sidebarStore } from '@/stores/sidebar'
 import { planExecutionManager } from '@/utils/plan-execution-manager'
+import { useMessage } from '@/composables/useMessage'
+import { memoryStore } from "@/stores/memory";
+import type { InputMessage } from "@/stores/memory";
+import { getUploadedFiles, hasUploadedFiles } from '@/stores/uploadedFiles'
 
 const route = useRoute()
 const router = useRouter()
 const taskStore = useTaskStore()
 const { t } = useI18n()
+const { message } = useMessage()
 
 const prompt = ref<string>('')
 const inputOnlyContent = ref<string>('')
 const rightPanelRef = ref()
 const chatRef = ref()
 const inputRef = ref()
+const sidebarRef = ref()
 const isExecutingPlan = ref(false)
 const isLoading = ref(false)
 const currentRootPlanId = ref<string | null>(null)
@@ -119,6 +144,30 @@ const leftPanelWidth = ref(50) // Left panel width percentage
 const isResizing = ref(false)
 const startX = ref(0)
 const startLeftWidth = ref(0)
+
+// Computed left panel width that adjusts based on sidebar width
+const computedLeftPanelWidth = computed(() => {
+  if (sidebarStore.isCollapsed) {
+    return leftPanelWidth.value
+  }
+  
+  // When sidebar is expanded, calculate available width for left panel
+  // Get sidebar width from the sidebar component if available
+  let sidebarWidth = 26 // Default sidebar width
+  
+  // Try to get actual sidebar width from the sidebar component
+  if (sidebarRef.value && sidebarRef.value.sidebarWidth !== undefined) {
+    sidebarWidth = sidebarRef.value.sidebarWidth
+  }
+  
+  // Calculate maximum available width for left panel
+  // Total width is 100%, so left panel max = 100% - sidebar width
+  const maxAvailableWidth = 100 - sidebarWidth
+  
+  // Ensure left panel width doesn't exceed available space
+  // Also maintain minimum width of 20%
+  return Math.max(20, Math.min(maxAvailableWidth, leftPanelWidth.value))
+})
 
 onMounted(() => {
   console.log('[Direct] onMounted called')
@@ -208,7 +257,13 @@ onMounted(() => {
       if (uiState) {
         handleInputUpdateState(uiState.enabled, uiState.placeholder)
       }
-    }
+    },
+
+    onPlanError: (message: string) => {
+      // No right panel notification needed, uncomment if needed
+      // showMessage(`${t('planTemplate.executionFailed')}: ${message}`, 'error')
+      chatRef.value.handlePlanError(message)
+    },
   })
 
   console.log('[Direct] Event callbacks registered to planExecutionManager')
@@ -223,13 +278,15 @@ onMounted(() => {
     // Mark the task as processed to prevent duplicate responses
     taskStore.markTaskAsProcessed()
 
-    // 直接执行任务，不在输入框显示内容
-    nextTick(() => {
-      if (chatRef.value && typeof chatRef.value.handleSendMessage === 'function') {
-        console.log('[Direct] Directly executing task via chatRef.handleSendMessage:', taskContent)
-        chatRef.value.handleSendMessage(taskContent)
-      } else {
-        console.warn('[Direct] chatRef.handleSendMessage method not available, falling back to prompt')
+    // Execute task directly without showing content in input box
+    nextTick(async () => {
+      try {
+        console.log('[Direct] Calling handleChatSendMessage with taskContent:', taskContent)
+        await handleChatSendMessage({
+          input: taskContent
+        })
+      } catch (error) {
+        console.warn('[Direct] handleChatSendMessage failed, falling back to prompt:', error)
         prompt.value = taskContent
       }
     })
@@ -267,14 +324,14 @@ onMounted(() => {
     })
   }
 
-  // 监听window上的plan-execution-requested事件
+  // Listen for plan-execution-requested events on window
   window.addEventListener('plan-execution-requested', ((event: CustomEvent) => {
     console.log('[DirectView] Received plan-execution-requested event:', event.detail)
     handlePlanExecutionRequested(event.detail)
   }) as EventListener)
 
-  // 不再需要检查sessionStorage中的待执行计划
-  // 因为task.ts中的emitPlanExecutionRequested已经直接发送事件
+  // No longer need to check pending plans in sessionStorage
+  // Because emitPlanExecutionRequested in task.ts already sends events directly
 })
 
 // Listen for changes in the store's task (only handle unprocessed tasks)
@@ -287,13 +344,13 @@ watch(
       taskStore.markTaskAsProcessed()
       console.log('[Direct] Received new task from store:', taskContent)
 
-      // 直接执行任务，不在输入框显示内容
-      nextTick(() => {
-        if (chatRef.value && typeof chatRef.value.handleSendMessage === 'function') {
-          console.log('[Direct] Directly executing new task via chatRef.handleSendMessage:', taskContent)
-          chatRef.value.handleSendMessage(taskContent)
-        } else {
-          console.warn('[Direct] chatRef.handleSendMessage method not available for new task')
+      // Execute task directly without showing content in input box
+      nextTick(async () => {
+        try {
+          console.log('[Direct] Directly executing new task via handleChatSendMessage:', taskContent)
+          await handleChatSendMessage({ input: taskContent })
+        } catch (error) {
+          console.warn('[Direct] handleChatSendMessage failed for new task:', error)
         }
       })
     } else {
@@ -318,7 +375,7 @@ watch(
   () => taskStore.taskToInput,
   (newTaskToInput) => {
     console.log('[Direct] Watch taskStore.taskToInput triggered, newTaskToInput:', newTaskToInput)
-    if (newTaskToInput && newTaskToInput.trim()) {
+    if (newTaskToInput?.trim()) {
       console.log('[Direct] Setting input value from taskToInput:', newTaskToInput)
       nextTick(() => {
         if (inputRef.value && typeof inputRef.value.setInputValue === 'function') {
@@ -417,21 +474,79 @@ const shouldProcessEventForCurrentPlan = (rootPlanId: string, allowSpecialIds: b
   return false
 }
 
-// New event handler function
-const handleSendMessage = (message: string) => {
-  console.log('[DirectView] Send message from input:', message)
+// Handle message sending from ChatContainer via event
+const handleChatSendMessage = async (query: InputMessage) => {
+  let assistantMessage: any = null
+  
+  try {
+    console.log('[DirectView] Processing send-message event:', query)
+    
+    // Add user message to UI
+    const userMessage = chatRef.value?.addMessage('user', query.input)
+    if ((query as any).attachments && userMessage) {
+      chatRef.value?.updateMessage(userMessage.id, { attachments: (query as any).attachments })
+    }
 
-  // In direct mode, only call chat component's handleSendMessage
-  // It will handle both UI update and API call via handleDirectMode
-  if (chatRef.value && typeof chatRef.value.handleSendMessage === 'function') {
-    console.log('[DirectView] Calling chatRef.handleSendMessage:', message)
-    chatRef.value.handleSendMessage(message)
-  } else {
-    console.warn('[DirectView] chatRef.handleSendMessage method not available')
+    // Add assistant thinking message
+    assistantMessage = chatRef.value?.addMessage('assistant', '', {
+      thinking: t('chat.thinkingProcessing')
+    })
+
+    if (assistantMessage) {
+      chatRef.value?.startStreaming(assistantMessage.id)
+    }
+
+    // Import and call DirectApiService to send message to backend
+    const { DirectApiService } = await import('@/api/direct-api-service')
+    
+    console.log('[DirectView] Calling DirectApiService.sendMessage')
+    const response = await DirectApiService.sendMessage(query)
+    console.log('[DirectView] API response received:', response)
+
+    // Handle the response
+    if (response.planId && assistantMessage) {
+      // Plan mode: Update message with plan execution info
+      chatRef.value?.updateMessage(assistantMessage.id, {
+        thinking: t('chat.planningExecution'),
+        planExecution: { 
+          currentPlanId: response.planId,
+          rootPlanId: response.planId,
+          status: 'running'
+        }
+      })
+      
+      // Set current root plan ID for the new plan execution
+      currentRootPlanId.value = response.planId
+      console.log('[DirectView] Set currentRootPlanId to:', response.planId)
+      
+      // Start polling for plan updates
+      planExecutionManager.handlePlanExecutionRequested(response.planId, query.input)
+      console.log('[DirectView] Started polling for plan execution updates')
+    } else if (assistantMessage) {
+      // Direct mode: Show the response
+      chatRef.value?.updateMessage(assistantMessage.id, {
+        content: response.message || response.result || 'No response received from backend'
+      })
+      chatRef.value?.stopStreaming(assistantMessage.id)
+    }
+    
+  } catch (error: any) {
+    console.error('[DirectView] Send message failed:', error)
+    
+    // Show error message
+    chatRef.value?.addMessage('assistant', `Error: ${error?.message || 'Failed to send message'}`)
+    if (assistantMessage) {
+      chatRef.value?.stopStreaming(assistantMessage.id)
+    }
   }
+}
 
-  // Remove the duplicate API call - chat component's handleDirectMode will handle this
-  // planExecutionManager.handleUserMessageSendRequested(message) // Removed to prevent double API calls
+// Event handler for input area send button
+const handleSendMessage = async (message: InputMessage) => {
+  console.log('[DirectView] Send message from input:', JSON.stringify(message))
+
+  // Directly handle the message sending
+  await handleChatSendMessage(message)
 }
 
 const handleInputClear = () => {
@@ -450,13 +565,13 @@ const handleInputUpdateState = (enabled: boolean, placeholder?: string) => {
   isLoading.value = !enabled
 }
 
-const handleStepSelected = (planId: string, stepIndex: number) => {
-  console.log('[DirectView] Step selected:', planId, stepIndex)
+const handleStepSelected = (stepId: string) => {
+  console.log('[DirectView] Step selected:', stepId)
 
   // Forward step selection to right panel
   if (rightPanelRef.value && typeof rightPanelRef.value.handleStepSelected === 'function') {
-    console.log('[DirectView] Forwarding step selection to right panel:', planId, stepIndex)
-    rightPanelRef.value.handleStepSelected(planId, stepIndex)
+    console.log('[DirectView] Forwarding step selection to right panel:', stepId)
+    rightPanelRef.value.handleStepSelected(stepId)
   } else {
     console.warn('[DirectView] rightPanelRef.handleStepSelected method not available')
   }
@@ -503,6 +618,7 @@ const handlePlanExecutionRequested = async (payload: {
   title: string
   planData: any
   params?: string | undefined
+  replacementParams?: Record<string, string> | undefined
 }) => {
   console.log('[DirectView] Plan execution requested:', payload)
 
@@ -514,23 +630,36 @@ const handlePlanExecutionRequested = async (payload: {
 
   isExecutingPlan.value = true
 
-  // 标记是否已经添加了用户消息
+  // Mark whether user message has been added
   let userMessageAdded = false;
+  let assistantMessage: any = null;
 
-  // First call chat component's addMessage to update UI (avoid triggering user-message-send-requested event)
-  if (chatRef.value && typeof chatRef.value.addMessage === 'function') {
-    console.log('[DirectView] Calling chatRef.addMessage for plan execution:', payload.title)
-    chatRef.value.addMessage('user', payload.title)
+  // Add user and assistant messages using the same pattern as handleChatSendMessage
+  try {
+    console.log('[DirectView] Adding messages for plan execution:', payload.title)
+    
+    // Add user message
+    chatRef.value?.addMessage('user', payload.title)
     userMessageAdded = true;
-  } else {
-    console.warn('[DirectView] chatRef.addMessage method not available')
+    
+    // Add assistant message to show system feedback
+    assistantMessage = chatRef.value?.addMessage('assistant', '', {
+      thinking: t('chat.planningExecution')
+    })
+    
+    if (assistantMessage) {
+      chatRef.value?.startStreaming(assistantMessage.id)
+      console.log('[DirectView] Added assistant message for plan execution:', assistantMessage.id)
+    }
+  } catch (messageError) {
+    console.warn('[DirectView] Failed to add messages:', messageError)
   }
   try {
     // Get the plan template ID
     const planTemplateId = payload.planData?.planTemplateId || payload.planData?.id || payload.planData?.planId
 
     if (!planTemplateId) {
-      throw new Error('没有找到计划模板ID')
+      throw new Error(t('direct.planTemplateIdNotFound'))
     }
 
     console.log(
@@ -542,20 +671,36 @@ const handlePlanExecutionRequested = async (payload: {
 
     // Call real API to execute plan
     console.log('[Direct] About to call PlanActApiService.executePlan')
+    
+    // Get uploaded files from global state
+    const uploadedFiles = hasUploadedFiles() ? getUploadedFiles() : undefined
+    console.log('[Direct] Executing with uploaded files:', uploadedFiles?.length ?? 0)
+    console.log('[Direct] Executing with replacement params:', payload.replacementParams)
+    
     let response
     if (payload.params?.trim()) {
-      console.log('[Direct] Calling executePlan with params:', payload.params.trim())
-      response = await PlanActApiService.executePlan(planTemplateId, payload.params.trim())
+      console.log('[Direct] Calling executePlan with rawParam:', payload.params.trim())
+      response = await PlanActApiService.executePlan(planTemplateId, payload.params.trim(), uploadedFiles, payload.replacementParams)
     } else {
-      console.log('[Direct] Calling executePlan without params')
-      response = await PlanActApiService.executePlan(planTemplateId)
+      console.log('[Direct] Calling executePlan without rawParam')
+      response = await PlanActApiService.executePlan(planTemplateId, undefined, uploadedFiles, payload.replacementParams)
     }
 
     console.log('[Direct] Plan execution API response:', response)
 
-    // Use the returned planId to start the plan execution process and let the manager handle all message processing
-    if (response.planId) {
+    // Use the returned planId to start the plan execution process
+    if (response.planId && assistantMessage) {
       console.log('[Direct] Got planId from response:', response.planId, 'starting plan execution')
+
+      // Update assistant message with plan execution info
+      chatRef.value?.updateMessage(assistantMessage.id, {
+        thinking: t('chat.planningExecution'),
+        planExecution: { 
+          currentPlanId: response.planId,
+          rootPlanId: response.planId,
+          status: 'running'
+        }
+      })
 
       // Set current root plan ID for the new plan execution
       currentRootPlanId.value = response.planId
@@ -566,7 +711,7 @@ const handlePlanExecutionRequested = async (payload: {
       planExecutionManager.handlePlanExecutionRequested(response.planId, payload.title)
     } else {
       console.error('[Direct] No planId in response:', response)
-      throw new Error('执行计划失败：未返回有效的计划ID')
+      throw new Error(t('direct.executionFailedNoPlanId'))
     }
   } catch (error: any) {
     console.error('[Direct] Plan execution failed:', error)
@@ -575,25 +720,43 @@ const handlePlanExecutionRequested = async (payload: {
     // Clear current root plan ID on error
     currentRootPlanId.value = null
 
-    // Get chat component reference to display error
-    if (chatRef.value && typeof chatRef.value.addMessage === 'function') {
+    // Handle error messages using consistent pattern
+    try {
       console.log('[Direct] Adding error messages to chat')
-      // 只有在之前没有添加过用户消息的情况下才添加
+      
+      // Only add user message if it hasn't been added before
       if (!userMessageAdded) {
-        chatRef.value.addMessage('user', payload.title)
+        chatRef.value?.addMessage('user', payload.title)
       }
-      // Then add error message
-      chatRef.value.addMessage('assistant', `执行计划失败: ${error.message || '未知错误'}`, {
-        thinking: undefined,
-      })
-    } else {
-      console.error('[Direct] Chat ref not available, showing alert')
-      alert(`执行计划失败: ${error.message || '未知错误'}`)
+      
+      // Update assistant message with error or add new error message
+      if (assistantMessage) {
+        chatRef.value?.updateMessage(assistantMessage.id, {
+          content: `${t('direct.executionFailed')}: ${error.message || t('common.unknownError')}`,
+          thinking: undefined
+        })
+        chatRef.value?.stopStreaming(assistantMessage.id)
+      } else {
+        chatRef.value?.addMessage('assistant', `${t('direct.executionFailed')}: ${error.message || t('common.unknownError')}`)
+      }
+    } catch (errorHandlingError) {
+      console.error('[Direct] Failed to add error messages:', errorHandlingError)
+      // Note: This would need toast import if used in this context
+      alert(`${t('direct.executionFailed')}: ${error.message || t('common.unknownError')}`)
     }
   } finally {
     console.log('[Direct] Plan execution finished, resetting isExecutingPlan flag')
     isExecutingPlan.value = false
   }
+}
+
+const memorySelected = () => {
+  chatRef.value.showMemory()
+}
+
+const newChat = () => {
+  memoryStore.clearMemoryId()
+  chatRef.value.newChat()
 }
 </script>
 
@@ -655,7 +818,7 @@ const handlePlanExecutionRequested = async (payload: {
   transition: all 0.2s ease;
 }
 
-/* 调整右面板样式 */
+/* Adjust right panel styles */
 :deep(.right-panel) {
   transition: width 0.1s ease;
 }
@@ -761,4 +924,41 @@ const handlePlanExecutionRequested = async (payload: {
   font-size: 16px;
   padding: 50px;
 }
+
+/* Message toast styles */
+.message-toast {
+  position: fixed;
+  top: 80px;
+  right: 24px;
+  z-index: 9999;
+  min-width: 320px;
+  max-width: 480px;
+  padding: 16px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  animation: slideInRight 0.3s ease-out;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.message-toast.error {
+  color: #fff2f0;
+  background-color: #ff4d4f;
+}
+
+.message-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  word-break: break-all;
+}
+
+.message-content i {
+  font-size: 16px;
+}
+
 </style>

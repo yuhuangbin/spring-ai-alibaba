@@ -19,13 +19,13 @@ package com.alibaba.cloud.ai.prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 
 /**
- * 提示词常量类，动态加载提示词文件
+ * Prompt constant class, dynamically loads prompt files
  *
  * @author zhangshenghang
  */
 public class PromptConstant {
 
-	// 提示词模板获取方法
+	// Prompt template acquisition method
 	public static PromptTemplate getInitRewritePromptTemplate() {
 		return new PromptTemplate(PromptLoader.loadPrompt("init-rewrite"));
 	}
@@ -62,6 +62,10 @@ public class PromptConstant {
 		return new PromptTemplate(PromptLoader.loadPrompt("planner"));
 	}
 
+	public static PromptTemplate getPlannerNl2sqlOnlyTemplate() {
+		return new PromptTemplate(PromptLoader.loadPrompt("planner-nl2sql-only"));
+	}
+
 	public static PromptTemplate getReportGeneratorPromptTemplate() {
 		return new PromptTemplate(PromptLoader.loadPrompt("report-generator"));
 	}
@@ -70,37 +74,24 @@ public class PromptConstant {
 		return new PromptTemplate(PromptLoader.loadPrompt("sql-error-fixer"));
 	}
 
-	public static PromptTemplate getPythonExecutorPromptTemplate() {
-		return new PromptTemplate(PromptLoader.loadPrompt("python-executor"));
+	public static PromptTemplate getPythonGeneratorPromptTemplate() {
+		return new PromptTemplate(PromptLoader.loadPrompt("python-generator"));
+	}
+
+	public static PromptTemplate getPythonAnalyzePromptTemplate() {
+		return new PromptTemplate(PromptLoader.loadPrompt("python-analyze"));
 	}
 
 	public static PromptTemplate getQuestionExpansionPromptTemplate() {
 		return new PromptTemplate(PromptLoader.loadPrompt("question-expansion"));
 	}
 
-	// 兼容性方法，保持向后兼容
-	@Deprecated
-	public static final PromptTemplate INIT_REWRITE_PROMPT_TEMPLATE = getInitRewritePromptTemplate();
+	public static PromptTemplate getBusinessKnowledgePromptTemplate() {
+		return new PromptTemplate(PromptLoader.loadPrompt("business-knowledge"));
+	}
 
-	@Deprecated
-	public static final PromptTemplate QUESTION_TO_KEYWORDS_PROMPT_TEMPLATE = getQuestionToKeywordsPromptTemplate();
-
-	@Deprecated
-	public static final PromptTemplate MIX_SELECTOR_PROMPT_TEMPLATE = getMixSelectorPromptTemplate();
-
-	@Deprecated
-	public static final PromptTemplate MIX_SQL_GENERATOR_SYSTEM_PROMPT_TEMPLATE = getMixSqlGeneratorSystemPromptTemplate();
-
-	@Deprecated
-	public static final PromptTemplate MIX_SQL_GENERATOR_PROMPT_TEMPLATE = getMixSqlGeneratorPromptTemplate();
-
-	@Deprecated
-	public static final PromptTemplate EXTRACT_DATETIME_PROMPT_TEMPLATE = getExtractDatetimePromptTemplate();
-
-	@Deprecated
-	public static final PromptTemplate SEMANTIC_CONSISTENCY_PROMPT_TEMPLATE = getSemanticConsistencyPromptTemplate();
-
-	@Deprecated
-	public static final PromptTemplate MIX_SQL_GENERATOR_SYSTEM_PROMPT_CHECK_TEMPLATE = getMixSqlGeneratorSystemCheckPromptTemplate();
+	public static PromptTemplate getSemanticModelPromptTemplate() {
+		return new PromptTemplate(PromptLoader.loadPrompt("semantic-model"));
+	}
 
 }

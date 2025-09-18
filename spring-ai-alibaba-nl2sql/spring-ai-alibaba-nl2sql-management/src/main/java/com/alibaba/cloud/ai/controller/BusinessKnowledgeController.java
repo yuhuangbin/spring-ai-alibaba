@@ -17,7 +17,6 @@ package com.alibaba.cloud.ai.controller;
 
 import com.alibaba.cloud.ai.entity.BusinessKnowledge;
 import com.alibaba.cloud.ai.service.BusinessKnowledgeService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
@@ -25,18 +24,23 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * 业务知识管理控制器
+ * Business Knowledge Management Controller
  */
 @Controller
 @RequestMapping("/api/business-knowledge")
+@CrossOrigin(origins = "*")
 public class BusinessKnowledgeController {
 
-	@Autowired
-	private BusinessKnowledgeService businessKnowledgeService;
+	private final BusinessKnowledgeService businessKnowledgeService;
+
+	public BusinessKnowledgeController(BusinessKnowledgeService businessKnowledgeService) {
+		this.businessKnowledgeService = businessKnowledgeService;
+	}
 
 	@GetMapping
 	@ResponseBody
-	public ResponseEntity<List<BusinessKnowledge>> list(@RequestParam(required = false) String datasetId,
+	public ResponseEntity<List<BusinessKnowledge>> list(
+			@RequestParam(value = "datasetId", required = false) String datasetId,
 			@RequestParam(required = false) String keyword) {
 		List<BusinessKnowledge> result;
 		if (keyword != null && !keyword.trim().isEmpty()) {
@@ -53,7 +57,7 @@ public class BusinessKnowledgeController {
 
 	@GetMapping("/{id}")
 	@ResponseBody
-	public ResponseEntity<BusinessKnowledge> get(@PathVariable Long id) {
+	public ResponseEntity<BusinessKnowledge> get(@PathVariable(value = "id") Long id) {
 		BusinessKnowledge knowledge = businessKnowledgeService.findById(id);
 		if (knowledge == null) {
 			return ResponseEntity.notFound().build();
@@ -70,7 +74,8 @@ public class BusinessKnowledgeController {
 
 	@PutMapping("/{id}")
 	@ResponseBody
-	public ResponseEntity<BusinessKnowledge> update(@PathVariable Long id, @RequestBody BusinessKnowledge knowledge) {
+	public ResponseEntity<BusinessKnowledge> update(@PathVariable(value = "id") Long id,
+			@RequestBody BusinessKnowledge knowledge) {
 		if (businessKnowledgeService.findById(id) == null) {
 			return ResponseEntity.notFound().build();
 		}
@@ -81,7 +86,7 @@ public class BusinessKnowledgeController {
 
 	@DeleteMapping("/{id}")
 	@ResponseBody
-	public ResponseEntity<Void> delete(@PathVariable Long id) {
+	public ResponseEntity<Void> delete(@PathVariable(value = "id") Long id) {
 		if (businessKnowledgeService.findById(id) == null) {
 			return ResponseEntity.notFound().build();
 		}

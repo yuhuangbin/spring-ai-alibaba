@@ -15,6 +15,7 @@
  */
 package com.alibaba.cloud.ai.controller;
 
+import com.alibaba.cloud.ai.entity.ApiResponse;
 import com.alibaba.cloud.ai.entity.BusinessKnowledge;
 import com.alibaba.cloud.ai.entity.BusinessKnowledgeDTO;
 import com.alibaba.cloud.ai.service.BusinessKnowledgePersistenceService;
@@ -42,52 +43,95 @@ public class BusinessKnowledgePersistenceController {
 		this.businessKnowledgePersistenceService = businessKnowledgePersistenceService;
 	}
 
-	// 新增
+	// Add
 	@PostMapping("/add")
-	public ResponseEntity<Void> addField(@RequestBody BusinessKnowledgeDTO knowledgeDTO) {
+	public ResponseEntity<ApiResponse> addField(@RequestBody BusinessKnowledgeDTO knowledgeDTO) {
 		businessKnowledgePersistenceService.addKnowledge(knowledgeDTO);
-		return ResponseEntity.ok().build();
+		return ResponseEntity.ok(ApiResponse.success("业务知识添加成功"));
 	}
 
 	@PostMapping("/addList")
-	public ResponseEntity<Void> addFields(@RequestBody List<BusinessKnowledgeDTO> knowledgeDTOs) {
+	public ResponseEntity<ApiResponse> addFields(@RequestBody List<BusinessKnowledgeDTO> knowledgeDTOs) {
 		businessKnowledgePersistenceService.addKnowledgeList(knowledgeDTOs);
-		return ResponseEntity.ok().build();
+		return ResponseEntity.ok(ApiResponse.success("批量业务知识添加成功"));
 	}
 
-	// 获取数据集id列表
+	// Get dataset ID list
 	@GetMapping("/datasetIds")
 	public ResponseEntity<List<String>> getDataSetIds() {
 		List<String> datasetIds = businessKnowledgePersistenceService.getDataSetIds();
 		return ResponseEntity.ok(datasetIds);
 	}
 
-	// 根据datasetId获取数据
+	// Get data by datasetId
 	@GetMapping("/dataset/{datasetId}")
-	public ResponseEntity<List<BusinessKnowledge>> getDataSetById(@PathVariable String datasetId) {
+	public ResponseEntity<List<BusinessKnowledge>> getDataSetById(@PathVariable(value = "datasetId") String datasetId) {
 		List<BusinessKnowledge> knowledge = businessKnowledgePersistenceService.getFieldByDataSetId(datasetId);
 		return ResponseEntity.ok(knowledge);
 	}
 
-	// 搜索
+	// Search
 	@GetMapping("/search")
-	public ResponseEntity<List<BusinessKnowledge>> searchFields(@RequestParam String content) {
+	public ResponseEntity<List<BusinessKnowledge>> searchFields(@RequestParam(value = "content") String content) {
 		List<BusinessKnowledge> knowledge = businessKnowledgePersistenceService.searchFields(content);
 		return ResponseEntity.ok(knowledge);
 	}
 
-	// 根据id删除
-	@DeleteMapping("/{id}")
-	public ResponseEntity<Void> deleteFieldById(@PathVariable long id) {
+	// Delete by id
+	@DeleteMapping("/delete/{id}")
+	public ResponseEntity<ApiResponse> deleteFieldById(@PathVariable(value = "id") long id) {
 		businessKnowledgePersistenceService.deleteFieldById(id);
-		return ResponseEntity.ok().build();
+		return ResponseEntity.ok(ApiResponse.success("业务知识删除成功"));
 	}
 
-	// 编辑更新
-	@PutMapping("/{id}")
-	public ResponseEntity<Void> updateField(@PathVariable long id, @RequestBody BusinessKnowledgeDTO knowledgeDTO) {
+	// Edit update
+	@PutMapping("/update/{id}")
+	public ResponseEntity<ApiResponse> updateField(@PathVariable(value = "id") long id,
+			@RequestBody BusinessKnowledgeDTO knowledgeDTO) {
 		businessKnowledgePersistenceService.updateField(knowledgeDTO, id);
-		return ResponseEntity.ok().build();
+		return ResponseEntity.ok(ApiResponse.success("业务知识更新成功"));
+	}
+
+	// Get business knowledge list by agent ID
+	@GetMapping("/agent/{agentId}")
+	public ResponseEntity<List<BusinessKnowledge>> getKnowledgeByAgentId(
+			@PathVariable(value = "agentId") String agentId) {
+		List<BusinessKnowledge> knowledge = businessKnowledgePersistenceService.getKnowledgeByAgentId(agentId);
+		return ResponseEntity.ok(knowledge);
+	}
+
+	// Add business knowledge for agent
+	@PostMapping("/agent/{agentId}/add")
+	public ResponseEntity<ApiResponse> addKnowledgeForAgent(@PathVariable(value = "agentId") String agentId,
+			@RequestBody BusinessKnowledgeDTO knowledgeDTO) {
+		knowledgeDTO.setAgentId(agentId);
+		businessKnowledgePersistenceService.addKnowledge(knowledgeDTO);
+		return ResponseEntity.ok(ApiResponse.success("业务知识添加成功"));
+	}
+
+	// Batch add business knowledge for agent
+	@PostMapping("/agent/{agentId}/addList")
+	public ResponseEntity<ApiResponse> addKnowledgeListForAgent(@PathVariable(value = "agentId") String agentId,
+			@RequestBody List<BusinessKnowledgeDTO> knowledgeDTOs) {
+		knowledgeDTOs.forEach(dto -> dto.setAgentId(agentId));
+		businessKnowledgePersistenceService.addKnowledgeList(knowledgeDTOs);
+		return ResponseEntity.ok(ApiResponse.success("批量业务知识添加成功"));
+	}
+
+	// Delete all business knowledge by agent ID
+	@DeleteMapping("/agent/{agentId}")
+	public ResponseEntity<ApiResponse> deleteKnowledgeByAgentId(@PathVariable(value = "agentId") String agentId) {
+		businessKnowledgePersistenceService.deleteKnowledgeByAgentId(agentId);
+		return ResponseEntity.ok(ApiResponse.success("智能体业务知识删除成功"));
+	}
+
+	// Search business knowledge within agent scope
+	@GetMapping("/agent/{agentId}/search")
+	public ResponseEntity<List<BusinessKnowledge>> searchKnowledgeInAgent(
+			@PathVariable(value = "agentId") String agentId, @RequestParam(value = "content") String content) {
+		List<BusinessKnowledge> knowledge = businessKnowledgePersistenceService.searchKnowledgeInAgent(agentId,
+				content);
+		return ResponseEntity.ok(knowledge);
 	}
 
 }
