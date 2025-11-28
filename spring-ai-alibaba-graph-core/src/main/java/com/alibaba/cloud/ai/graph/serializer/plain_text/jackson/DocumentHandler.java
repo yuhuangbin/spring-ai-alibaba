@@ -15,6 +15,7 @@
  */
 package com.alibaba.cloud.ai.graph.serializer.plain_text.jackson;
 
+import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
 import org.springframework.ai.content.Media;
 import org.springframework.ai.document.Document;
 
@@ -55,24 +56,27 @@ public interface DocumentHandler {
 		@Override
 		public void serialize(Document document, JsonGenerator gen, SerializerProvider provider) throws IOException {
 			gen.writeStartObject();
-			gen.writeStringField("@type", "DOCUMENT");
+			gen.writeStringField("@class", document.getClass().getName());
 			gen.writeStringField(Field.ID.name, document.getId());
 			gen.writeStringField(Field.TEXT.name, document.getText());
 
-			// 序列化 media 字段
+			// Serialize media field
 			if (document.getMedia() != null) {
 				gen.writeObjectField(Field.MEDIA.name, document.getMedia());
 			}
 
-			// 序列化 score 字段
+			// Serialize score field
 			if (document.getScore() != null) {
 				gen.writeNumberField(Field.SCORE.name, document.getScore());
 			}
-
 			serializeMetadata(gen, document.getMetadata());
 			gen.writeEndObject();
 		}
 
+		@Override
+		public void serializeWithType(Document value, JsonGenerator gen, SerializerProvider serializers, TypeSerializer typeSer) throws IOException {
+			serialize(value, gen, serializers);
+		}
 	}
 
 	class Deserializer extends StdDeserializer<Document> {
@@ -90,18 +94,17 @@ public interface DocumentHandler {
 			var text = node.get(Field.TEXT.name).asText();
 			var metadata = deserializeMetadata(mapper, node);
 
-			// 反序列化 media 字段
+			// Deserialize media field
 			Media media = null;
 			if (node.has(Field.MEDIA.name) && !node.get(Field.MEDIA.name).isNull()) {
 				media = mapper.treeToValue(node.get(Field.MEDIA.name), Media.class);
 			}
 
-			// 反序列化 score 字段
+			// Deserialize score field
 			Double score = null;
 			if (node.has(Field.SCORE.name) && !node.get(Field.SCORE.name).isNull()) {
 				score = node.get(Field.SCORE.name).asDouble();
 			}
-
 			return Document.builder().id(id).text(text).media(media).metadata(metadata).score(score).build();
 		}
 

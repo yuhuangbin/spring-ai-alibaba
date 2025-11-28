@@ -68,26 +68,65 @@ public class MongoSaver implements BaseCheckpointSaver {
 
 	/**
 	 * Instantiates a new Mongo saver.
+	 *
 	 * @param client the client
 	 */
 	public MongoSaver(MongoClient client) {
-		this.client = client;
-		this.database = client.getDatabase(DB_NAME);
-		this.txnOptions = TransactionOptions.builder().writeConcern(WriteConcern.MAJORITY).build();
-		this.objectMapper = new ObjectMapper();
-		Runtime.getRuntime().addShutdownHook(new Thread(client::close));
+		this(client, new ObjectMapper());
 	}
 
 	/**
 	 * Instantiates a new Mongo saver.
+	 *
 	 * @param client the client
 	 */
 	public MongoSaver(MongoClient client, ObjectMapper objectMapper) {
 		this.client = client;
 		this.database = client.getDatabase(DB_NAME);
 		this.txnOptions = TransactionOptions.builder().writeConcern(WriteConcern.MAJORITY).build();
-		this.objectMapper = objectMapper;
+		this.objectMapper = BaseCheckpointSaver.configureObjectMapper(objectMapper);
 		Runtime.getRuntime().addShutdownHook(new Thread(client::close));
+	}
+
+	/**
+	 * Creates a new builder for MongoSaver.
+	 * @return a new Builder instance
+	 */
+	public static Builder builder() {
+		return new Builder();
+	}
+
+	/**
+	 * Builder class for MongoSaver.
+	 */
+	public static class Builder {
+		private MongoClient client;
+		private ObjectMapper objectMapper;
+
+		public Builder client(MongoClient client) {
+			this.client = client;
+			return this;
+		}
+
+		public Builder objectMapper(ObjectMapper objectMapper) {
+			this.objectMapper = objectMapper;
+			return this;
+		}
+
+		/**
+		 * Builds a new MongoSaver instance.
+		 * @return a new MongoSaver instance
+		 * @throws IllegalArgumentException if client is null
+		 */
+		public MongoSaver build() {
+			if (client == null) {
+				throw new IllegalArgumentException("client cannot be null");
+			}
+			if (objectMapper == null) {
+				return new MongoSaver(client);
+			}
+			return new MongoSaver(client, objectMapper);
+		}
 	}
 
 	@Override
@@ -96,7 +135,7 @@ public class MongoSaver implements BaseCheckpointSaver {
 		if (configOption.isPresent()) {
 			// Sets transaction options
 			ClientSession clientSession = this.client
-				.startSession(ClientSessionOptions.builder().defaultTransactionOptions(txnOptions).build());
+					.startSession(ClientSessionOptions.builder().defaultTransactionOptions(txnOptions).build());
 			clientSession.startTransaction();
 			List<Checkpoint> checkpoints = null;
 			try {
@@ -109,17 +148,14 @@ public class MongoSaver implements BaseCheckpointSaver {
 				checkpoints = objectMapper.readValue(checkpointsStr, new TypeReference<>() {
 				});
 				clientSession.commitTransaction();
-			}
-			catch (Exception e) {
+			} catch (Exception e) {
 				clientSession.abortTransaction();
 				throw new RuntimeException(e);
-			}
-			finally {
+			} finally {
 				clientSession.close();
 			}
 			return checkpoints;
-		}
-		else {
+		} else {
 			throw new IllegalArgumentException("threadId is not allow null");
 		}
 	}
@@ -130,7 +166,7 @@ public class MongoSaver implements BaseCheckpointSaver {
 		if (configOption.isPresent()) {
 			// lock
 			ClientSession clientSession = this.client
-				.startSession(ClientSessionOptions.builder().defaultTransactionOptions(txnOptions).build());
+					.startSession(ClientSessionOptions.builder().defaultTransactionOptions(txnOptions).build());
 			List<Checkpoint> checkpoints = null;
 			try {
 				clientSession.startTransaction();
@@ -146,21 +182,18 @@ public class MongoSaver implements BaseCheckpointSaver {
 				if (config.checkPointId().isPresent()) {
 					List<Checkpoint> finalCheckpoints = checkpoints;
 					return config.checkPointId()
-						.flatMap(id -> finalCheckpoints.stream()
-							.filter(checkpoint -> checkpoint.getId().equals(id))
-							.findFirst());
+							.flatMap(id -> finalCheckpoints.stream()
+									.filter(checkpoint -> checkpoint.getId().equals(id))
+									.findFirst());
 				}
 				return getLast(getLinkedList(checkpoints), config);
-			}
-			catch (Exception e) {
+			} catch (Exception e) {
 				clientSession.abortTransaction();
 				throw new RuntimeException(e);
-			}
-			finally {
+			} finally {
 				clientSession.close();
 			}
-		}
-		else {
+		} else {
 			throw new IllegalArgumentException("threadId is not allow null");
 		}
 	}
@@ -171,7 +204,7 @@ public class MongoSaver implements BaseCheckpointSaver {
 		if (configOption.isPresent()) {
 			// lock
 			ClientSession clientSession = this.client
-				.startSession(ClientSessionOptions.builder().defaultTransactionOptions(txnOptions).build());
+					.startSession(ClientSessionOptions.builder().defaultTransactionOptions(txnOptions).build());
 			clientSession.startTransaction();
 			try {
 				MongoCollection<Document> collection = database.getCollection(COLLECTION_NAME);
@@ -186,46 +219,42 @@ public class MongoSaver implements BaseCheckpointSaver {
 					if (config.checkPointId().isPresent()) { // Replace Checkpoint
 						String checkPointId = config.checkPointId().get();
 						int index = IntStream.range(0, checkpoints.size())
-							.filter(i -> checkpoints.get(i).getId().equals(checkPointId))
-							.findFirst()
-							.orElseThrow(() -> (new NoSuchElementException(
-									format("Checkpoint with id %s not found!", checkPointId))));
+								.filter(i -> checkpoints.get(i).getId().equals(checkPointId))
+								.findFirst()
+								.orElseThrow(() -> (new NoSuchElementException(
+										format("Checkpoint with id %s not found!", checkPointId))));
 						checkpointLinkedList.set(index, checkpoint);
 						Document tempDocument = new Document().append("_id", DOCUMENT_PREFIX + configOption.get())
-							.append(DOCUMENT_CONTENT_KEY, objectMapper.writeValueAsString(checkpointLinkedList));
+								.append(DOCUMENT_CONTENT_KEY, objectMapper.writeValueAsString(checkpointLinkedList));
 						collection.replaceOne(Filters.eq("_id", DOCUMENT_PREFIX + configOption.get()), tempDocument);
 						clientSession.commitTransaction();
 						clientSession.close();
-						return config;
+						return RunnableConfig.builder(config).checkPointId(checkpoint.getId()).build();
 					}
 				}
 				if (checkpointLinkedList == null) {
 					checkpointLinkedList = new LinkedList<>();
 					checkpointLinkedList.push(checkpoint); // Add Checkpoint
 					Document tempDocument = new Document().append("_id", DOCUMENT_PREFIX + configOption.get())
-						.append(DOCUMENT_CONTENT_KEY, objectMapper.writeValueAsString(checkpointLinkedList));
+							.append(DOCUMENT_CONTENT_KEY, objectMapper.writeValueAsString(checkpointLinkedList));
 					InsertOneResult insertOneResult = collection.insertOne(tempDocument);
 					insertOneResult.wasAcknowledged();
-				}
-				else {
+				} else {
 					checkpointLinkedList.push(checkpoint); // Add Checkpoint
 					Document tempDocument = new Document().append("_id", DOCUMENT_PREFIX + configOption.get())
-						.append(DOCUMENT_CONTENT_KEY, objectMapper.writeValueAsString(checkpointLinkedList));
+							.append(DOCUMENT_CONTENT_KEY, objectMapper.writeValueAsString(checkpointLinkedList));
 					ReplaceOptions opts = new ReplaceOptions().upsert(true);
 					collection.replaceOne(Filters.eq("_id", DOCUMENT_PREFIX + configOption.get()), tempDocument, opts);
 				}
 				clientSession.commitTransaction();
-			}
-			catch (Exception e) {
+			} catch (Exception e) {
 				clientSession.abortTransaction();
 				throw new RuntimeException(e);
-			}
-			finally {
+			} finally {
 				clientSession.close();
 			}
 			return RunnableConfig.builder(config).checkPointId(checkpoint.getId()).build();
-		}
-		else {
+		} else {
 			throw new IllegalArgumentException("threadId is not allow null");
 		}
 	}
@@ -235,7 +264,7 @@ public class MongoSaver implements BaseCheckpointSaver {
 		Optional<String> configOption = config.threadId();
 		if (configOption.isPresent()) {
 			ClientSession clientSession = this.client
-				.startSession(ClientSessionOptions.builder().defaultTransactionOptions(txnOptions).build());
+					.startSession(ClientSessionOptions.builder().defaultTransactionOptions(txnOptions).build());
 			clientSession.startTransaction();
 			try {
 				MongoCollection<Document> collection = database.getCollection(COLLECTION_NAME);
@@ -243,16 +272,13 @@ public class MongoSaver implements BaseCheckpointSaver {
 				collection.findOneAndDelete(dbObject);
 				clientSession.commitTransaction();
 				return true;
-			}
-			catch (Exception e) {
+			} catch (Exception e) {
 				clientSession.abortTransaction();
 				throw new RuntimeException(e);
-			}
-			finally {
+			} finally {
 				clientSession.close();
 			}
-		}
-		else {
+		} else {
 			throw new IllegalArgumentException("threadId is not allow null");
 		}
 	}

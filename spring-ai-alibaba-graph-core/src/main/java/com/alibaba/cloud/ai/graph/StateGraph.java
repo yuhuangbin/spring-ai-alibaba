@@ -20,7 +20,6 @@ import com.alibaba.cloud.ai.graph.action.AsyncEdgeAction;
 import com.alibaba.cloud.ai.graph.action.AsyncNodeAction;
 import com.alibaba.cloud.ai.graph.action.AsyncNodeActionWithConfig;
 import com.alibaba.cloud.ai.graph.checkpoint.config.SaverConfig;
-import com.alibaba.cloud.ai.graph.checkpoint.constant.SaverEnum;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 
 import com.alibaba.cloud.ai.graph.exception.Errors;
@@ -111,20 +110,21 @@ public class StateGraph {
 	 */
 	static class JacksonSerializer extends SpringAIJacksonStateSerializer {
 
-		/**
-		 * Instantiates a new Jackson serializer.
-		 */
-		public JacksonSerializer() {
-			super(OverAllState::new);
-		}
+        /**
+         * Instantiates a new Jackson serializer.
+         */
+        public JacksonSerializer() {
+            super(OverAllState::new);
+        }
 
-		/**
-		 * Gets object mapper.
-		 * @return the object mapper
-		 */
-		ObjectMapper getObjectMapper() {
-			return objectMapper;
-		}
+        /**
+         * Gets object mapper.
+         *
+         * @return the object mapper
+         */
+        ObjectMapper getObjectMapper() {
+            return objectMapper;
+        }
 
 	}
 
@@ -133,17 +133,46 @@ public class StateGraph {
 	 * serializer.
 	 * @param name the name of the graph
 	 * @param keyStrategyFactory the factory for providing key strategies
-	 * @param stateSerializer the plain text state serializer to use
+	 * @param stateSerializer the state serializer to use
 	 */
-	public StateGraph(String name, KeyStrategyFactory keyStrategyFactory, PlainTextStateSerializer stateSerializer) {
+	public StateGraph(String name, KeyStrategyFactory keyStrategyFactory, StateSerializer stateSerializer) {
 		this.name = name;
 		this.keyStrategyFactory = keyStrategyFactory;
-		this.stateSerializer = stateSerializer;
+		this.stateSerializer = Objects.requireNonNull(stateSerializer, "stateSerializer cannot be null");
 	}
 
-	public StateGraph(KeyStrategyFactory keyStrategyFactory, PlainTextStateSerializer stateSerializer) {
+	/**
+	 * Constructs a StateGraph with the specified key strategy factory and state serializer.
+	 * @param keyStrategyFactory the factory for providing key strategies
+	 * @param stateSerializer the state serializer to use
+	 */
+	public StateGraph(KeyStrategyFactory keyStrategyFactory, StateSerializer stateSerializer) {
 		this.keyStrategyFactory = keyStrategyFactory;
-		this.stateSerializer = stateSerializer;
+		this.stateSerializer = Objects.requireNonNull(stateSerializer, "stateSerializer cannot be null");
+	}
+
+	/**
+	 * Constructs a StateGraph with the specified name, key strategy factory, and state
+	 * serializer.
+	 * @param name the name of the graph
+	 * @param keyStrategyFactory the factory for providing key strategies
+	 * @param stateSerializer the plain text state serializer to use
+	 * @deprecated Use {@link #StateGraph(String, KeyStrategyFactory, StateSerializer)} instead
+	 */
+	@Deprecated
+	public StateGraph(String name, KeyStrategyFactory keyStrategyFactory, PlainTextStateSerializer stateSerializer) {
+		this(name, keyStrategyFactory, (StateSerializer) stateSerializer);
+	}
+
+	/**
+	 * Constructs a StateGraph with the specified key strategy factory and plain text state serializer.
+	 * @param keyStrategyFactory the factory for providing key strategies
+	 * @param stateSerializer the plain text state serializer to use
+	 * @deprecated Use {@link #StateGraph(KeyStrategyFactory, StateSerializer)} instead
+	 */
+	@Deprecated
+	public StateGraph(KeyStrategyFactory keyStrategyFactory, PlainTextStateSerializer stateSerializer) {
+		this(keyStrategyFactory, (StateSerializer) stateSerializer);
 	}
 
 	/**
@@ -152,11 +181,11 @@ public class StateGraph {
 	 * @param name the name of the graph
 	 * @param keyStrategyFactory the factory for providing key strategies
 	 * @param stateSerializer the SpringAI state serializer to use
+	 * @deprecated Use {@link #StateGraph(String, KeyStrategyFactory, StateSerializer)} instead
 	 */
+	@Deprecated
 	public StateGraph(String name, KeyStrategyFactory keyStrategyFactory, SpringAIStateSerializer stateSerializer) {
-		this.name = name;
-		this.keyStrategyFactory = keyStrategyFactory;
-		this.stateSerializer = stateSerializer;
+		this(name, keyStrategyFactory, (StateSerializer) stateSerializer);
 	}
 
 	/**
@@ -164,10 +193,11 @@ public class StateGraph {
 	 * serializer.
 	 * @param keyStrategyFactory the factory for providing key strategies
 	 * @param stateSerializer the SpringAI state serializer to use
+	 * @deprecated Use {@link #StateGraph(KeyStrategyFactory, StateSerializer)} instead
 	 */
+	@Deprecated
 	public StateGraph(KeyStrategyFactory keyStrategyFactory, SpringAIStateSerializer stateSerializer) {
-		this.keyStrategyFactory = keyStrategyFactory;
-		this.stateSerializer = stateSerializer;
+		this(keyStrategyFactory, (StateSerializer) stateSerializer);
 	}
 
 	public StateGraph(String name, KeyStrategyFactory keyStrategyFactory) {
@@ -186,7 +216,7 @@ public class StateGraph {
 	}
 
 	/**
-	 * Default constructor that initializes a StateGraph with a Gson-based state
+	 * Default constructor that initializes a StateGraph with a Jackson-based state
 	 * serializer.
 	 */
 	public StateGraph() {
@@ -454,7 +484,7 @@ public class StateGraph {
 	 */
 	public CompiledGraph compile() throws GraphStateException {
 		SaverConfig saverConfig = SaverConfig.builder()
-			.register(SaverEnum.MEMORY.getValue(), new MemorySaver())
+			.register(new MemorySaver())
 			.build();
 		return compile(CompileConfig.builder().saverConfig(saverConfig).build());
 	}

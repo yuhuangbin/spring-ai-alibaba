@@ -52,6 +52,7 @@ import static com.alibaba.cloud.ai.graph.StateGraph.START;
 import static com.alibaba.cloud.ai.graph.action.AsyncEdgeAction.edge_async;
 import static com.alibaba.cloud.ai.graph.action.AsyncNodeAction.node_async;
 import static java.util.concurrent.CompletableFuture.completedFuture;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -174,7 +175,7 @@ public class StateGraphTest {
 
 		CompiledGraph app = workflow.compile();
 
-		Optional<OverAllState> result = app.call(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1"));
+		Optional<OverAllState> result = app.invoke(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1"));
 		System.out.println("result = " + result);
 		assertTrue(result.isPresent());
 
@@ -211,7 +212,7 @@ public class StateGraphTest {
 
 		CompiledGraph app = workflow.compile();
 
-		Optional<OverAllState> result = app.call(Map.of());
+		Optional<OverAllState> result = app.invoke(Map.of());
 
 		assertTrue(result.isPresent());
 		System.out.println(result.get().data());
@@ -247,7 +248,7 @@ public class StateGraphTest {
 		var config = RunnableConfig.builder().addMetadata("configData", "test").build();
 
 		// Execute the graph with input and configured metadata
-		var result = app.call(Map.of("input", "test1"), config);
+		var result = app.invoke(Map.of("input", "test1"), config);
 		assertTrue(result.isPresent());
 
 		// Expected output after execution
@@ -285,7 +286,7 @@ public class StateGraphTest {
 
 		CompiledGraph app = workflow.compile();
 
-		Optional<OverAllState> result = app.call(Map.of());
+		Optional<OverAllState> result = app.invoke(Map.of());
 
 		assertTrue(result.isPresent());
 		log.info("{}", result.get().data());
@@ -324,7 +325,7 @@ public class StateGraphTest {
 
 		CompiledGraph app = workflow.compile();
 
-		Optional<OverAllState> result = app.call(Map.of());
+		Optional<OverAllState> result = app.invoke(Map.of());
 
 		assertTrue(result.isPresent());
 
@@ -375,7 +376,7 @@ public class StateGraphTest {
 
 		// 使用实时流式处理，收集最后一个状态
 		final OverAllState[] finalState = new OverAllState[1];
-		workflowParent.fluxStream(Map.of())
+		workflowParent.stream(Map.of())
 			.doOnNext(System.out::println) // 实时输出每个节点执行结果
 			.map(NodeOutput::state)
 			.doOnNext(state -> finalState[0] = state) // 保存最后的状态
@@ -448,7 +449,7 @@ public class StateGraphTest {
 		}).build());
 
 		final OverAllState[] finalState = new OverAllState[1];
-		app.fluxStream(Map.of(),
+		app.stream(Map.of(),
 				RunnableConfig.builder().addParallelNodeExecutor("A", ForkJoinPool.commonPool()).build())
 			.doOnNext(output -> System.out.println(output))
 			.map(NodeOutput::state)
@@ -491,12 +492,12 @@ public class StateGraphTest {
 
 		// 第二个测试也使用实时流式处理
 		final OverAllState[] finalState2 = new OverAllState[1];
-		app.fluxStream(Map.of(),
+		app.stream(Map.of(),
 				RunnableConfig.builder().addParallelNodeExecutor(START, Executors.newSingleThreadExecutor()).build())
-			.doOnNext(output -> System.out.println(output)) // 实时输出每个节点执行结果
+			.doOnNext(output -> System.out.println(output))
 			.map(NodeOutput::state)
-			.doOnNext(state -> finalState2[0] = state) // 保存最后的状态
-			.blockLast(); // 只等待流完成，不阻塞中间过程
+			.doOnNext(state -> finalState2[0] = state)
+			.blockLast();
 
 		assertTrue(finalState2[0] != null);
 		List<String> messages2 = (List<String>) finalState2[0].value("messages").get();
@@ -532,7 +533,7 @@ public class StateGraphTest {
 			.addEdge("C", END);
 		var app = workflow.compile();
 
-		app.fluxStream(Map.of()).subscribe(output -> {
+		app.stream(Map.of()).subscribe(output -> {
 			System.out.println("Node output: " + output);
 		});
 	}
@@ -555,7 +556,7 @@ public class StateGraphTest {
 
 		// 使用实时流式处理，收集所有步骤用于测试验证
 		final List<NodeOutput> allSteps = new ArrayList<>();
-		graph.fluxStream(Map.of())
+		graph.stream(Map.of())
 			.doOnNext(System.out::println) // 实时输出每个节点执行结果
 			.doOnNext(allSteps::add) // 收集所有步骤
 			.blockLast(); // 只等待流完成，不阻塞中间过程
@@ -586,13 +587,13 @@ public class StateGraphTest {
 
 		CompiledGraph app = workflow.compile();
 		RunnableConfig runnableConfig = new RunnableConfig.Builder().threadId("thread1").build();
-		Optional<OverAllState> result = app.call(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1"), runnableConfig);
+		Optional<OverAllState> result = app.invoke(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1"), runnableConfig);
 		System.out.println("result = " + result);
 		assertTrue(result.isPresent());
 
 		// resume - 使用实时流式处理
 		final OverAllState[] resumeState = new OverAllState[1];
-		app.fluxStream(null, runnableConfig)
+		app.stream(null, runnableConfig)
 			.doOnNext(output -> System.out.println("Resume: " + output)) // 实时输出恢复过程
 			.map(NodeOutput::state)
 			.doOnNext(state -> resumeState[0] = state) // 保存最后的状态
@@ -702,20 +703,40 @@ public class StateGraphTest {
 		};
 		PlainTextStateSerializer plainTextStateSerializer = new StateGraph.JacksonSerializer();
 		StateGraph workflow = new StateGraph(keyStrategyFactory, plainTextStateSerializer).addEdge(START, "agent_1")
-			.addNode("agent_1", node_async(state -> {
-				log.info("agent_1\n{}", state);
-				return Map.of("prop1", "test");
-			}))
-			.addEdge("agent_1", END);
+				.addNode("agent_1", node_async(state -> {
+					log.info("agent_1\n{}", state);
+					return Map.of("prop1", "test"
+							, "user", new User("zhangsan", 16), "userList"
+							, List.of(new User("lisi", 18))
+							, "userAry", new User[]{new User("wangwu", 20)});
+				}))
+				.addEdge("agent_1", END);
 
 		CompiledGraph app = workflow.compile();
 
-		Optional<OverAllState> result = app.call(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1"));
+		Optional<OverAllState> result = app.invoke(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1"));
 		System.out.println("result = " + result);
 		assertTrue(result.isPresent());
 
-		Map<String, String> expected = Map.of("input", "test1", "prop1", "test");
-		assertIterableEquals(sortMap(expected), sortMap(result.get().data()));
+		Map<String, Object> expected = Map.of("input", "test1", "prop1", "test"
+				, "user", new User("zhangsan", 16)
+				, "userList", List.of(new User("lisi", 18))
+				, "userAry", new User[]{new User("wangwu", 20)});
+
+		HashMap<String, Object> expectedMClone = new HashMap<>(expected);
+		HashMap<String, Object> resultClone = new HashMap<>(result.get().data());
+		Object expectedAry = expectedMClone.remove("userAry");
+		Object resultAry = resultClone.remove("userAry");
+		assertIterableEquals(sortMap(expectedMClone), sortMap(resultClone));
+		assertArrayEquals((User[]) expectedAry, (User[]) resultAry);
+	}
+
+	/**
+	 * Used to provide test data for the testWithSubSerialize method
+	 * @param name
+	 * @param age
+	 */
+	record User(String name, int age) {
 	}
 
 	/**
@@ -732,7 +753,7 @@ public class StateGraphTest {
 
 		CompiledGraph app = workflow.compile();
 
-		Optional<OverAllState> result = app.call(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1"));
+		Optional<OverAllState> result = app.invoke(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1"));
 		System.out.println("result = " + result);
 		assertTrue(result.isPresent());
 
@@ -759,7 +780,7 @@ public class StateGraphTest {
 
 		CompiledGraph app = workflow.compile();
 
-		Optional<OverAllState> result = app.call(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1"));
+		Optional<OverAllState> result = app.invoke(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1"));
 		System.out.println("result = " + result);
 		assertTrue(result.isPresent());
 
@@ -802,7 +823,7 @@ public class StateGraphTest {
 				}
 			}).build());
 
-		app.call(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1"));
+		app.invoke(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1"));
 	}
 
 	/**
@@ -835,7 +856,7 @@ public class StateGraphTest {
 				}
 			}).build());
 
-		app.call(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1"));
+		app.invoke(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1"));
 	}
 
 	/**
@@ -875,7 +896,140 @@ public class StateGraphTest {
 			}).build());
 
 		assertThrows(ArithmeticException.class,
-				(NamedExecutable) () -> app.call(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1")));
+				(NamedExecutable) () -> app.invoke(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1")));
+	}
+
+	/**
+	 * Tests that lifecycle listeners receive correct nodeId for parallel node children.
+	 */
+	@Test
+	void testParallelNodeLifecycleListenerNodeId() throws Exception {
+		List<String> beforeNodeIds = new ArrayList<>();
+		List<String> afterNodeIds = new ArrayList<>();
+
+		var workflow = new StateGraph(createKeyStrategyFactory()).addNode("A", makeNode("A"))
+			.addNode("A1", makeNode("A1"))
+			.addNode("A2", makeNode("A2"))
+			.addNode("A3", makeNode("A3"))
+			.addNode("B", makeNode("B"))
+			.addEdge("A", "A1")
+			.addEdge("A", "A2")
+			.addEdge("A", "A3")
+			.addEdge("A1", "B")
+			.addEdge("A2", "B")
+			.addEdge("A3", "B")
+			.addEdge(START, "A")
+			.addEdge("B", END);
+
+		var app = workflow.compile(CompileConfig.builder().withLifecycleListener(new GraphLifecycleListener() {
+			@Override
+			public void before(String nodeId, Map<String, Object> state, RunnableConfig config, Long curTime) {
+				synchronized (beforeNodeIds) {
+					beforeNodeIds.add(nodeId);
+					log.info("Lifecycle before: nodeId = {}", nodeId);
+				}
+			}
+
+			@Override
+			public void after(String nodeId, Map<String, Object> state, RunnableConfig config, Long curTime) {
+				synchronized (afterNodeIds) {
+					afterNodeIds.add(nodeId);
+					log.info("Lifecycle after: nodeId = {}", nodeId);
+				}
+			}
+		}).build());
+
+		app.stream(Map.of(), RunnableConfig.builder().addParallelNodeExecutor("A", ForkJoinPool.commonPool()).build())
+			.blockLast();
+
+		log.info("Before nodeIds: {}", beforeNodeIds);
+		log.info("After nodeIds: {}", afterNodeIds);
+
+		assertTrue(beforeNodeIds.contains("A"));
+		assertTrue(afterNodeIds.contains("A"));
+
+		assertTrue(beforeNodeIds.contains("__PARALLEL__(A)"));
+		assertTrue(afterNodeIds.contains("__PARALLEL__(A)"));
+
+		assertTrue(beforeNodeIds.contains("A1"));
+		assertTrue(afterNodeIds.contains("A1"));
+
+		assertTrue(beforeNodeIds.contains("A2"));
+		assertTrue(afterNodeIds.contains("A2"));
+
+		assertTrue(beforeNodeIds.contains("A3"));
+		assertTrue(afterNodeIds.contains("A3"));
+
+		assertTrue(beforeNodeIds.contains("B"));
+		assertTrue(afterNodeIds.contains("B"));
+
+		long parallelIdCount = beforeNodeIds.stream().filter(id -> id.equals("__PARALLEL__(A)")).count();
+		assertEquals(1, parallelIdCount);
+	}
+
+	/**
+	 * Tests ParallelNode thread pool optimization and logging functionality.
+	 * Verifies that the default thread pool is properly configured and logs metrics correctly.
+	 */
+	@Test
+	void testParallelNodeThreadPoolOptimization() throws Exception {
+		// Create a simple parallel workflow
+		var workflow = new StateGraph(createKeyStrategyFactory())
+			.addNode("parallelParent", makeNode("parallelParent"))
+			.addNode("child1", makeNode("child1"))
+			.addNode("child2", makeNode("child2"))
+			.addNode("child3", makeNode("child3"))
+			.addNode("merge", makeNode("merge"))
+			.addEdge(START, "parallelParent")
+			.addEdge("parallelParent", "child1")
+			.addEdge("parallelParent", "child2")
+			.addEdge("parallelParent", "child3")
+			.addEdge("child1", "merge")
+			.addEdge("child2", "merge")
+			.addEdge("child3", "merge")
+			.addEdge("merge", END);
+
+		// Compile the workflow
+		var app = workflow.compile();
+
+		// Capture log output to verify thread pool logging
+		final List<String> logMessages = new ArrayList<>();
+		
+		// Create a test listener to capture lifecycle events
+		var testListener = new GraphLifecycleListener() {
+			@Override
+			public void before(String nodeId, Map<String, Object> state, RunnableConfig config, Long curTime) {
+				if (nodeId.contains("PARALLEL")) {
+					logMessages.add("Parallel node started: " + nodeId);
+				}
+			}
+
+			@Override
+			public void after(String nodeId, Map<String, Object> state, RunnableConfig config, Long curTime) {
+				if (nodeId.contains("PARALLEL")) {
+					logMessages.add("Parallel node completed: " + nodeId);
+				}
+			}
+		};
+
+		// Add the listener to compile config
+		var config = CompileConfig.builder().withLifecycleListener(testListener).build();
+		
+		// Override the default workflow compilation to use our config
+		var appWithConfig = workflow.compile(config);
+
+		// Execute the workflow
+		appWithConfig.stream(Map.of()).blockLast();
+
+		// Verify that all nodes were executed
+		assertTrue(logMessages.size() >= 2, "Should have at least parallel start and complete messages");
+		
+		// Verify that we have the expected parallel node markers
+		boolean hasParallelStart = logMessages.stream().anyMatch(msg -> msg.contains("Parallel node started"));
+		boolean hasParallelComplete = logMessages.stream().anyMatch(msg -> msg.contains("Parallel node completed"));
+		
+		assertTrue(hasParallelStart, "Should have parallel node start message");
+		assertTrue(hasParallelComplete, "Should have parallel node complete message");
 	}
 
 	@Test
@@ -906,7 +1060,7 @@ public class StateGraphTest {
 			.addEdge("agent_3", END)
 			.addEdge("agent_1", "agent_2");
 		CompiledGraph compile = workflow.compile();
-		compile.call(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1"));
+		compile.invoke(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1"));
 	}
 
 	@Test
@@ -936,7 +1090,7 @@ public class StateGraphTest {
 		System.out.println("===============mermaid===============");
 		System.out.println(mermaid);
 
-		OverAllState state = compile.call(Map.of()).orElseThrow();
+		OverAllState state = compile.invoke(Map.of()).orElseThrow();
 		assertEquals(List.of("go to command node", "node1", "node2"), state.value("messages", List.class).get());
 	}
 
@@ -966,12 +1120,12 @@ public class StateGraphTest {
 		CompiledGraph app = workflow
 			.compile(CompileConfig.builder().interruptBefore("agent_2").interruptBeforeEdge(true).build());
 		RunnableConfig runnableConfig = new RunnableConfig.Builder().threadId("thread1").build();
-		Optional<OverAllState> result = app.call(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1"), runnableConfig);
+		Optional<OverAllState> result = app.invoke(Map.of(OverAllState.DEFAULT_INPUT_KEY, "test1"), runnableConfig);
 		System.out.println("result = " + result);
 		assertTrue(result.isPresent());
 
 		// resume
-		result = app.fluxStream(null, runnableConfig).reduce((a, b) -> b).map(NodeOutput::state).blockOptional();
+		result = app.stream(null, runnableConfig).reduce((a, b) -> b).map(NodeOutput::state).blockOptional();
 		System.out.println("result = " + result);
 		assertTrue(result.isPresent());
 

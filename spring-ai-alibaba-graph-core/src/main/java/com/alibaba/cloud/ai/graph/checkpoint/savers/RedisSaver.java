@@ -54,20 +54,62 @@ public class RedisSaver implements BaseCheckpointSaver {
 
 	/**
 	 * Instantiates a new Redis saver.
+	 *
 	 * @param redisson the redisson
 	 */
 	public RedisSaver(RedissonClient redisson) {
-		this.redisson = redisson;
-		this.objectMapper = new ObjectMapper();
+		this(redisson, new ObjectMapper());
 	}
 
 	/**
 	 * Instantiates a new Redis saver.
+	 *
 	 * @param redisson the redisson
 	 */
 	public RedisSaver(RedissonClient redisson, ObjectMapper objectMapper) {
 		this.redisson = redisson;
-		this.objectMapper = objectMapper;
+		this.objectMapper = BaseCheckpointSaver.configureObjectMapper(objectMapper);
+	}
+
+	/**
+	 * Creates a new builder for RedisSaver.
+	 * @return a new Builder instance
+	 */
+	public static Builder builder() {
+		return new Builder();
+	}
+
+	/**
+	 * Builder class for RedisSaver.
+	 */
+	public static class Builder {
+		private RedissonClient redisson;
+		private ObjectMapper objectMapper;
+
+		public Builder redisson(RedissonClient redisson) {
+			this.redisson = redisson;
+			return this;
+		}
+
+		public Builder objectMapper(ObjectMapper objectMapper) {
+			this.objectMapper = objectMapper;
+			return this;
+		}
+
+		/**
+		 * Builds a new RedisSaver instance.
+		 * @return a new RedisSaver instance
+		 * @throws IllegalArgumentException if redisson is null
+		 */
+		public RedisSaver build() {
+			if (redisson == null) {
+				throw new IllegalArgumentException("redisson cannot be null");
+			}
+			if (objectMapper == null) {
+				return new RedisSaver(redisson);
+			}
+			return new RedisSaver(redisson, objectMapper);
+		}
 	}
 
 	@Override
@@ -86,27 +128,21 @@ public class RedisSaver implements BaseCheckpointSaver {
 					}
 					return objectMapper.readValue(content, new TypeReference<>() {
 					});
-				}
-				else {
+				} else {
 					return List.of();
 				}
-			}
-			catch (InterruptedException e) {
+			} catch (InterruptedException e) {
 				throw new RuntimeException(e);
-			}
-			catch (JsonMappingException e) {
+			} catch (JsonMappingException e) {
 				throw new RuntimeException("Failed to parse JSON", e);
-			}
-			catch (JsonProcessingException e) {
+			} catch (JsonProcessingException e) {
 				throw new RuntimeException("Failed to parse JSON", e);
-			}
-			finally {
+			} finally {
 				if (tryLock) {
 					lock.unlock();
 				}
 			}
-		}
-		else {
+		} else {
 			throw new IllegalArgumentException("threadId is not allow null");
 		}
 	}
@@ -125,39 +161,32 @@ public class RedisSaver implements BaseCheckpointSaver {
 					List<Checkpoint> checkpoints;
 					if (content == null) {
 						checkpoints = new LinkedList<>();
-					}
-					else {
+					} else {
 						checkpoints = objectMapper.readValue(content, new TypeReference<>() {
 						});
 					}
 					if (config.checkPointId().isPresent()) {
 						return config.checkPointId()
-							.flatMap(id -> checkpoints.stream()
-								.filter(checkpoint -> checkpoint.getId().equals(id))
-								.findFirst());
+								.flatMap(id -> checkpoints.stream()
+										.filter(checkpoint -> checkpoint.getId().equals(id))
+										.findFirst());
 					}
 					return getLast(getLinkedList(checkpoints), config);
-				}
-				else {
+				} else {
 					return Optional.empty();
 				}
-			}
-			catch (InterruptedException e) {
+			} catch (InterruptedException e) {
 				throw new RuntimeException(e);
-			}
-			catch (JsonMappingException e) {
+			} catch (JsonMappingException e) {
 				throw new RuntimeException("Failed to parse JSON", e);
-			}
-			catch (JsonProcessingException e) {
+			} catch (JsonProcessingException e) {
 				throw new RuntimeException("Failed to parse JSON", e);
-			}
-			finally {
+			} finally {
 				if (tryLock) {
 					lock.unlock();
 				}
 			}
-		}
-		else {
+		} else {
 			throw new IllegalArgumentException("threadId isn't allow null");
 		}
 	}
@@ -176,8 +205,7 @@ public class RedisSaver implements BaseCheckpointSaver {
 					List<Checkpoint> checkpoints;
 					if (content == null) {
 						checkpoints = new LinkedList<>();
-					}
-					else {
+					} else {
 						checkpoints = objectMapper.readValue(content, new TypeReference<>() {
 						});
 					}
@@ -185,29 +213,26 @@ public class RedisSaver implements BaseCheckpointSaver {
 					if (config.checkPointId().isPresent()) { // Replace Checkpoint
 						String checkPointId = config.checkPointId().get();
 						int index = IntStream.range(0, checkpoints.size())
-							.filter(i -> checkpoints.get(i).getId().equals(checkPointId))
-							.findFirst()
-							.orElseThrow(() -> (new NoSuchElementException(
-									format("Checkpoint with id %s not found!", checkPointId))));
+								.filter(i -> checkpoints.get(i).getId().equals(checkPointId))
+								.findFirst()
+								.orElseThrow(() -> (new NoSuchElementException(
+										format("Checkpoint with id %s not found!", checkPointId))));
 						linkedList.set(index, checkpoint);
 						bucket.set(objectMapper.writeValueAsString(linkedList));
-						return config;
+						return RunnableConfig.builder(config).checkPointId(checkpoint.getId()).build();
 					}
 					linkedList.push(checkpoint); // Add Checkpoint
 					bucket.set(objectMapper.writeValueAsString(linkedList));
 				}
 				return RunnableConfig.builder(config).checkPointId(checkpoint.getId()).build();
-			}
-			catch (InterruptedException e) {
+			} catch (InterruptedException e) {
 				throw new RuntimeException(e);
-			}
-			finally {
+			} finally {
 				if (tryLock) {
 					lock.unlock();
 				}
 			}
-		}
-		else {
+		} else {
 			throw new IllegalArgumentException("threadId isn't allow null");
 		}
 	}
@@ -226,20 +251,16 @@ public class RedisSaver implements BaseCheckpointSaver {
 					return tryLock;
 				}
 				return false;
-			}
-			catch (InterruptedException e) {
+			} catch (InterruptedException e) {
 				throw new RuntimeException(e);
-			}
-			catch (JsonProcessingException e) {
+			} catch (JsonProcessingException e) {
 				throw new RuntimeException("Failed to serialize JSON", e);
-			}
-			finally {
+			} finally {
 				if (tryLock) {
 					lock.unlock();
 				}
 			}
-		}
-		else {
+		} else {
 			throw new IllegalArgumentException("threadId isn't allow null");
 		}
 	}

@@ -24,9 +24,11 @@ import com.alibaba.cloud.ai.graph.action.AsyncNodeActionWithConfig;
 import com.alibaba.cloud.ai.graph.utils.TypeRef;
 
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+import static com.alibaba.cloud.ai.graph.internal.node.SubCompiledGraphNode.outputKeyToParent;
+import static com.alibaba.cloud.ai.graph.internal.node.SubCompiledGraphNode.resumeSubGraphId;
+import static com.alibaba.cloud.ai.graph.internal.node.SubCompiledGraphNode.subGraphId;
 import static java.lang.String.format;
 
 /**
@@ -47,12 +49,9 @@ import static java.lang.String.format;
  */
 public record SubCompiledGraphNodeAction(String nodeId, CompileConfig parentCompileConfig,
 		CompiledGraph subGraph) implements AsyncNodeActionWithConfig {
-	public String subGraphId() {
-		return format("subgraph_%s", nodeId);
-	}
 
-	public String resumeSubGraphId() {
-		return format("resume_%s", subGraphId());
+	public String getResumeSubGraphId() {
+		return resumeSubGraphId(nodeId);
 	}
 
 	/**
@@ -66,10 +65,11 @@ public record SubCompiledGraphNodeAction(String nodeId, CompileConfig parentComp
 	 */
 	@Override
 	public CompletableFuture<Map<String, Object>> apply(OverAllState state, RunnableConfig config) {
-		final boolean resumeSubgraph = config.metadata(resumeSubGraphId(), new TypeRef<Boolean>() {
+		final boolean resumeSubgraph = config.metadata(resumeSubGraphId(nodeId), new TypeRef<Boolean>() {
 		}).orElse(false);
 
-		RunnableConfig subGraphRunnableConfig = config;
+		RunnableConfig subGraphRunnableConfig = RunnableConfig.builder(config).clearContext().checkPointId(null).nextNode(null).build();
+
 		var parentSaver = parentCompileConfig.checkpointSaver();
 		var subGraphSaver = subGraph.compileConfig.checkpointSaver();
 
@@ -81,10 +81,13 @@ public record SubCompiledGraphNodeAction(String nodeId, CompileConfig parentComp
 
 			// Check saver are the same instance
 			if (parentSaver.get() == subGraphSaver.get()) {
-				subGraphRunnableConfig = RunnableConfig.builder()
+				subGraphRunnableConfig = RunnableConfig.builder(config)
+					.clearContext()
 					.threadId(config.threadId()
-						.map(threadId -> format("%s_%s", threadId, subGraphId()))
-						.orElseGet(this::subGraphId))
+						.map(threadId -> format("%s_%s", threadId, subGraphId(nodeId)))
+						.orElseGet(() -> subGraphId(nodeId)))
+					.nextNode(null)
+					.checkPointId(null)
 					.build();
 			}
 		}
@@ -96,9 +99,9 @@ public record SubCompiledGraphNodeAction(String nodeId, CompileConfig parentComp
 				subGraphRunnableConfig = subGraph.updateState(subGraphRunnableConfig, state.data());
 			}
 
-			var fluxStream = subGraph.fluxDataStream(state, subGraphRunnableConfig);
+			var fluxStream = subGraph.graphResponseStream(state, subGraphRunnableConfig);
 
-			future.complete(Map.of(format("%s_%s", subGraphId(), UUID.randomUUID()), fluxStream));
+			future.complete(Map.of(outputKeyToParent(nodeId), fluxStream));
 
 		}
 		catch (Exception e) {

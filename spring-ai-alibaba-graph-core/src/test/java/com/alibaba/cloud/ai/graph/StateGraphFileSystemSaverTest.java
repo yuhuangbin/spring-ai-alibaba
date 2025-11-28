@@ -18,7 +18,6 @@ package com.alibaba.cloud.ai.graph;
 import com.alibaba.cloud.ai.graph.checkpoint.BaseCheckpointSaver;
 import com.alibaba.cloud.ai.graph.checkpoint.Checkpoint;
 import com.alibaba.cloud.ai.graph.checkpoint.config.SaverConfig;
-import com.alibaba.cloud.ai.graph.checkpoint.constant.SaverEnum;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.FileSystemSaver;
 import com.alibaba.cloud.ai.graph.state.StateSnapshot;
 
@@ -81,8 +80,7 @@ public class StateGraphFileSystemSaverTest {
 
 		CompileConfig compileConfig = CompileConfig.builder()
 			.saverConfig(SaverConfig.builder()
-				.type(SaverEnum.FILE.getValue())
-				.register(SaverEnum.FILE.getValue(), saver)
+				.register(saver)
 				.build())
 			.build();
 
@@ -100,7 +98,7 @@ public class StateGraphFileSystemSaverTest {
 				saver.deleteFile(runnableConfig_1);
 				saver.deleteFile(runnableConfig_2);
 
-				Optional<OverAllState> state = app.call(Map.of(), runnableConfig_1);
+				Optional<OverAllState> state = app.invoke(Map.of(), runnableConfig_1);
 
 				assertTrue(state.isPresent());
 				assertEquals(expectedSteps + (execution * 2), (int) state.get().data().get("steps"));
@@ -122,7 +120,7 @@ public class StateGraphFileSystemSaverTest {
 
 				// SUBMIT NEW THREAD 2
 
-				state = app.call(emptyMap(), runnableConfig_2);
+				state = app.invoke(emptyMap(), runnableConfig_2);
 
 				assertTrue(state.isPresent());
 				assertEquals(expectedSteps + execution, (int) state.get().data().get("steps"));
@@ -133,7 +131,7 @@ public class StateGraphFileSystemSaverTest {
 				assertEquals(expectedSteps + execution, messages.size());
 
 				// RE-SUBMIT THREAD 1
-				state = app.call(Map.of(), runnableConfig_1);
+				state = app.invoke(Map.of(), runnableConfig_1);
 
 				assertTrue(state.isPresent());
 				assertEquals(expectedSteps + 1 + execution * 2, (int) state.get().data().get("steps"));
@@ -178,8 +176,7 @@ public class StateGraphFileSystemSaverTest {
 
 		CompileConfig compileConfig = CompileConfig.builder()
 			.saverConfig(SaverConfig.builder()
-				.type(SaverEnum.FILE.getValue())
-				.register(SaverEnum.FILE.getValue(), saver)
+				.register(saver)
 				.build())
 			.build();
 
@@ -189,7 +186,7 @@ public class StateGraphFileSystemSaverTest {
 
 		RunnableConfig runnableConfig_2 = RunnableConfig.builder().threadId("thread_2").build();
 
-		var state = app.call(Map.of(), runnableConfig_1);
+		var state = app.invoke(Map.of(), runnableConfig_1);
 
 		assertTrue(state.isPresent());
 		assertEquals(expectedSteps, (int) state.get().data().get("steps"));
@@ -216,7 +213,7 @@ public class StateGraphFileSystemSaverTest {
 
 		// SUBMIT NEW THREAD 2
 
-		state = app.call(emptyMap(), runnableConfig_2);
+		state = app.invoke(emptyMap(), runnableConfig_2);
 
 		assertTrue(state.isPresent());
 		assertEquals(expectedSteps, (int) state.get().data().get("steps"));
@@ -234,7 +231,7 @@ public class StateGraphFileSystemSaverTest {
 		assertEquals(expectedSteps, messages.size());
 
 		// RE-SUBMIT THREAD 1
-		state = app.call(Map.of(), runnableConfig_1);
+		state = app.invoke(Map.of(), runnableConfig_1);
 
 		assertTrue(state.isPresent());
 		assertEquals(expectedSteps, (int) state.get().data().get("steps"));
@@ -276,8 +273,7 @@ public class StateGraphFileSystemSaverTest {
 
 		CompileConfig compileConfig = CompileConfig.builder()
 			.saverConfig(SaverConfig.builder()
-				.type(SaverEnum.FILE.getValue())
-				.register(SaverEnum.FILE.getValue(), saver)
+				.register(saver)
 				.build())
 			.releaseThread(true)
 			.build();
@@ -288,7 +284,7 @@ public class StateGraphFileSystemSaverTest {
 
 		var runnableConfig_2 = RunnableConfig.builder().threadId("thread_2").build();
 
-		var state_1 = app.call(Map.of(), runnableConfig_1);
+		var state_1 = app.invoke(Map.of(), runnableConfig_1);
 
 		assertTrue(state_1.isPresent());
 		assertEquals(expectedSteps, (int) state_1.get().data().get("steps"));
@@ -313,7 +309,7 @@ public class StateGraphFileSystemSaverTest {
 
 		// SUBMIT NEW THREAD 2
 
-		var state_2 = app.call(emptyMap(), runnableConfig_2);
+		var state_2 = app.invoke(emptyMap(), runnableConfig_2);
 
 		assertTrue(state_2.isPresent());
 		assertEquals(expectedSteps, (int) state_2.get().data().get("steps"));
@@ -329,7 +325,7 @@ public class StateGraphFileSystemSaverTest {
 		assertEquals(expectedSteps, messages.size());
 
 		// RE-SUBMIT THREAD 1
-		var dataFlux = app.fluxDataStream(Map.of(), runnableConfig_1);
+		var dataFlux = app.graphResponseStream(Map.of(), runnableConfig_1);
 
 		AtomicReference<Object> lastResult = new AtomicReference<>();
 		state_1 = dataFlux.flatMap(data -> {

@@ -16,6 +16,7 @@
 package com.alibaba.cloud.ai.graph;
 
 import com.alibaba.cloud.ai.dashscope.api.DashScopeApi;
+import com.alibaba.cloud.ai.dashscope.api.DashScopeResponseFormat;
 import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatModel;
 import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
 import com.alibaba.cloud.ai.graph.action.AsyncEdgeAction;
@@ -211,7 +212,7 @@ public class StateGraphStreamTest {
 		// Create real API client with API key from environment
 		realApi = DashScopeApi.builder().apiKey(API_KEY).build();
 		// Create chat model with default options
-		options = DashScopeChatOptions.builder().withModel(TEST_MODEL).build();
+		options = DashScopeChatOptions.builder().withResponseFormat(DashScopeResponseFormat.builder().type(DashScopeResponseFormat.Type.JSON_OBJECT).build()).withModel(TEST_MODEL).build();
 		chatModel = DashScopeChatModel.builder().dashScopeApi(realApi).defaultOptions(options).build();
 	}
 
@@ -242,7 +243,7 @@ public class StateGraphStreamTest {
 		var app = workflow.compile();
 
 		// Use Flux streaming approach - simplified version
-		app.fluxStream(Map.of())
+		app.stream(Map.of())
 			.doOnNext(output -> System.out.println(output))
 			.reduce((first, second) -> second) // Get the last state as result
 			.subscribe(lastState -> System.out.println(lastState),
@@ -284,7 +285,7 @@ public class StateGraphStreamTest {
 
 		CompiledGraph compiledGraph = stateGraph.compile();
 		// 初始化输入
-		compiledGraph.fluxStream(Map.of("input", "hoho~~")).subscribe(output -> {
+		compiledGraph.stream(Map.of("input", "hoho~~")).subscribe(output -> {
 			System.out.println("Node output: " + output);
 		});
 	}
@@ -319,7 +320,7 @@ public class StateGraphStreamTest {
 
 		CompiledGraph compiledGraph = stateGraph.compile();
 		// 初始化输入
-		compiledGraph.fluxStream(Map.of("input", "hoho~~")).subscribe(output -> {
+		compiledGraph.stream(Map.of("input", "hoho~~")).subscribe(output -> {
 			System.out.println("Node output: " + output);
 		});
 	}
@@ -346,7 +347,7 @@ public class StateGraphStreamTest {
 			.addEdge("result", END);
 
 		CompiledGraph compile = stateGraph.compile();
-		compile.fluxStream(Map.of(OverAllState.DEFAULT_INPUT_KEY, "给我写一个10字的小���章"))
+		compile.stream(Map.of(OverAllState.DEFAULT_INPUT_KEY, "给我写一个10字的小���章"))
 			.subscribe(nodeOutput -> System.out.println("Node output: " + nodeOutput));
 	}
 
@@ -373,7 +374,7 @@ public class StateGraphStreamTest {
 			.addEdge("result", END);
 
 		CompiledGraph compile = stateGraph.compile();
-		compile.fluxStream(Map.of(OverAllState.DEFAULT_INPUT_KEY, "给我写一个10字的小文章")).subscribe(output -> {
+		compile.stream(Map.of(OverAllState.DEFAULT_INPUT_KEY, "给我写一个10字的小文章")).subscribe(output -> {
 			System.out.println("Node output: " + output);
 		});
 	}
@@ -413,7 +414,7 @@ public class StateGraphStreamTest {
 		CompiledGraph app = stateGraph.compile();
 
 		// Use Flux streaming approach for collecting states - simplified version
-		app.fluxStream(Map.of("input", "test"))
+		app.stream(Map.of("input", "test"))
 			.filter(s -> !(s instanceof StreamingOutput))
 			.map(NodeOutput::state)
 			.collectList()
@@ -447,7 +448,7 @@ public class StateGraphStreamTest {
 		CompiledGraph compile = stateGraph.compile();
 
 		compile
-			.fluxStream(Map.of(OverAllState.DEFAULT_INPUT_KEY, "给我写一个10字的小文章"),
+			.stream(Map.of(OverAllState.DEFAULT_INPUT_KEY, "给我写一个10字的小文章"),
 					RunnableConfig.builder().addParallelNodeExecutor(START, ForkJoinPool.commonPool()).build())
 			.subscribe(output -> {
 				System.out.println("Node output: " + output);

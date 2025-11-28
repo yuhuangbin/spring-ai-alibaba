@@ -24,6 +24,7 @@ import com.alibaba.cloud.ai.graph.checkpoint.Checkpoint;
 import com.alibaba.cloud.ai.graph.utils.TypeRef;
 import reactor.core.publisher.Flux;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -66,12 +67,12 @@ public class MainGraphExecutor extends BaseGraphExecutor {
 				if (interruption.isPresent()) {
 					return Flux.just(GraphResponse.done(interruption.get()));
 				}
-				return Flux.just(GraphResponse.done(context.buildCurrentNodeOutput()));
+				return Flux.just(GraphResponse.done(context.buildNodeOutputAndAddCheckpoint(Map.of())));
 			}
 
 			if (context.getCurrentNodeId() != null && context.getConfig().isInterrupted(context.getCurrentNodeId())) {
 				context.getConfig().withNodeResumed(context.getCurrentNodeId());
-				return Flux.just(GraphResponse.done(GraphResponse.done(context.getCurrentState())));
+				return Flux.just(GraphResponse.done(GraphResponse.done(context.getCurrentStateData())));
 			}
 
 			if (context.isStartNode()) {
@@ -86,9 +87,8 @@ public class MainGraphExecutor extends BaseGraphExecutor {
 			if (resumeFrom.isPresent()) {
 				if (context.getCompiledGraph().compileConfig.interruptBeforeEdge()
 						&& java.util.Objects.equals(context.getNextNodeId(), INTERRUPT_AFTER)) {
-					var nextNodeCommand = context.nextNodeId(resumeFrom.get(), context.getCurrentState());
+					var nextNodeCommand = context.nextNodeId(resumeFrom.get(), context.getCurrentStateData());
 					context.setNextNodeId(nextNodeCommand.gotoNode());
-					context.updateCurrentState(nextNodeCommand.update());
 					context.setCurrentNodeId(null);
 				}
 			}
@@ -96,7 +96,7 @@ public class MainGraphExecutor extends BaseGraphExecutor {
 			if (context.shouldInterrupt()) {
 				try {
 					InterruptionMetadata metadata = InterruptionMetadata
-						.builder(context.getCurrentNodeId(), context.cloneState(context.getCurrentState()))
+						.builder(context.getCurrentNodeId(), context.cloneState(context.getCurrentStateData()))
 						.build();
 					return Flux.just(GraphResponse.done(metadata));
 				}
@@ -125,7 +125,6 @@ public class MainGraphExecutor extends BaseGraphExecutor {
 			context.doListeners(START, null);
 			Command nextCommand = context.getEntryPoint();
 			context.setNextNodeId(nextCommand.gotoNode());
-			context.updateCurrentState(nextCommand.update());
 
 			Optional<Checkpoint> cp = context.addCheckpoint(START, context.getNextNodeId());
 			NodeOutput output = context.buildOutput(START, cp);
