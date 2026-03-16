@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package com.alibaba.cloud.ai.graph.serializer.std;
 
 import com.alibaba.cloud.ai.graph.OverAllState;
 import com.alibaba.cloud.ai.graph.state.AgentStateFactory;
+import com.alibaba.cloud.ai.graph.streaming.StreamingOutput;
 
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -44,10 +45,13 @@ public class SpringAIStateSerializer extends ObjectStreamStateSerializer {
 		mapper().register(Message.class, new MessageSerializer());
 		mapper().register(AssistantMessage.ToolCall.class, new ToolCallSerializer());
 		mapper().register(ToolResponseMessage.ToolResponse.class, new ToolResponseSerializer());
+		mapper().register(StreamingOutput.class, new StreamingOutputSerializer());
 
 		// Conditionally register DeepSeekAssistantMessage serializer if available
 		registerDeepSeekSupportIfAvailable();
-	}
+        registerZhiPuAIStateSupportIfAvailable();
+
+    }
 
 	/**
 	 * Conditionally registers DeepSeekAssistantMessage support if the class is available on the classpath.
@@ -65,5 +69,15 @@ public class SpringAIStateSerializer extends ObjectStreamStateSerializer {
 			// IllegalStateException may be thrown if the class is found but constructor fails
 		}
 	}
+
+    private void registerZhiPuAIStateSupportIfAvailable() {
+        try {
+            Class<?> zhiPuAIClass = Class.forName("org.springframework.ai.zhipuai.ZhiPuAiAssistantMessage");
+            ZhiPuAIAssistantMessageSerializer serializer = new ZhiPuAIAssistantMessageSerializer();
+            mapper().register(zhiPuAIClass, serializer);
+        } catch (ClassNotFoundException | IllegalStateException e) {
+
+        }
+    }
 
 }

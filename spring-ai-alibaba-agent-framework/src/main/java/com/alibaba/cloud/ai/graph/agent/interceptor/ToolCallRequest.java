@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,9 @@ package com.alibaba.cloud.ai.graph.agent.interceptor;
 
 import org.springframework.ai.chat.messages.AssistantMessage;
 
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Request object for tool calls.
@@ -28,16 +30,38 @@ public class ToolCallRequest {
 	private final String arguments;
 	private final String toolCallId;
 	private final Map<String, Object> context;
+	private final ToolCallExecutionContext executionContext;
 
-	public ToolCallRequest(String toolName, String arguments, String toolCallId, Map<String, Object> context) {
+	public ToolCallRequest(String toolName, String arguments, String toolCallId, Map<String, Object> context,
+			ToolCallExecutionContext executionContext) {
 		this.toolName = toolName;
 		this.arguments = arguments;
 		this.toolCallId = toolCallId;
-		this.context = context;
+		// Defensive copy to prevent external modification
+		this.context = context != null ? new HashMap<>(context) : new HashMap<>();
+		this.executionContext = executionContext;
+	}
+
+	/**
+	 * Backward-compatible constructor.
+	 * <p>
+	 * {@code executionContext} is optional and can be injected via {@link Builder}.
+	 */
+	public ToolCallRequest(String toolName, String arguments, String toolCallId, Map<String, Object> context) {
+		this(toolName, arguments, toolCallId, context, null);
 	}
 
 	public static Builder builder() {
 		return new Builder();
+	}
+
+	/**
+	 * Creates a ToolCallRequest from an AssistantMessage.ToolCall.
+	 * @param toolCall the tool call from the assistant message
+	 * @return a new ToolCallRequest with empty context
+	 */
+	public static ToolCallRequest from(AssistantMessage.ToolCall toolCall) {
+		return builder().toolCall(toolCall).context(new HashMap<>()).build();
 	}
 
 	public static Builder builder(ToolCallRequest request) {
@@ -64,11 +88,16 @@ public class ToolCallRequest {
 		return context;
 	}
 
+	public Optional<ToolCallExecutionContext> getExecutionContext() {
+		return Optional.ofNullable(executionContext);
+	}
+
 	public static class Builder {
 		private String toolName;
 		private String arguments;
 		private String toolCallId;
 		private Map<String, Object> context;
+		private ToolCallExecutionContext executionContext;
 
 		public Builder toolCall(AssistantMessage.ToolCall toolCall) {
 			this.toolName = toolCall.name();
@@ -97,8 +126,13 @@ public class ToolCallRequest {
 			return this;
 		}
 
+		public Builder executionContext(ToolCallExecutionContext executionContext) {
+			this.executionContext = executionContext;
+			return this;
+		}
+
 		public ToolCallRequest build() {
-			return new ToolCallRequest(toolName, arguments, toolCallId, context);
+			return new ToolCallRequest(toolName, arguments, toolCallId, context, executionContext);
 		}
 	}
 }

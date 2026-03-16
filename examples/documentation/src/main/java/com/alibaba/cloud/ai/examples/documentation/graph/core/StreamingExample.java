@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -138,9 +138,6 @@ public class StreamingExample {
 		}
 	}
 
-	/**
-	 * 流式节点实现 - 使用 GraphFluxGenerator 处理流式响应
-	 */
 	public static class StreamingNode implements NodeAction {
 
 		private final ChatClient chatClient;
@@ -161,7 +158,6 @@ public class StreamingExample {
 					.stream()
 					.chatResponse();
 
-			// 使用 GraphFluxGenerator 将流式响应转换为 GraphFlux
 			return Map.of("messages", chatResponseFlux);
 		}
 	}

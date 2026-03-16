@@ -1,5 +1,5 @@
 <!--
-  ~ Copyright 2024-2025 the original author or authors.
+  ~ Copyright 2024-2026 the original author or authors.
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@
 
     <groupId>com.alibaba.cloud.ai</groupId>
     <artifactId>spring-ai-alibaba-bom</artifactId>
-    <version>1.1.0.0-SNAPSHOT</version>
+    <version>1.1.2.2</version>
 
     <packaging>pom</packaging>
 
@@ -91,6 +91,11 @@
         <dependencies>
             <dependency>
                 <groupId>com.alibaba.cloud.ai</groupId>
+                <artifactId>spring-ai-alibaba-starter-agentscope</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba.cloud.ai</groupId>
                 <artifactId>spring-ai-alibaba-starter-a2a-nacos</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -121,6 +126,12 @@
             <dependency>
                 <groupId>com.alibaba.cloud.ai</groupId>
                 <artifactId>spring-ai-alibaba-studio</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.alibaba.cloud.ai</groupId>
+                <artifactId>spring-ai-alibaba-sandbox</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -421,7 +432,7 @@
                         <artifactId>maven-javadoc-plugin</artifactId>
                         <version>${maven-javadoc-plugin.version}</version>
                         <configuration>
-                            <doclint>all,-missing</doclint>
+                            <doclint>none</doclint>
                         </configuration>
                         <executions>
                             <execution>
@@ -524,5 +535,12 @@
             </snapshots>
         </repository>
     </repositories>
+
+    <distributionManagement>
+        <snapshotRepository>
+            <id>snapshots</id>
+            <url>http://mvnrepo.alibaba-inc.com/mvn/snapshots</url>
+        </snapshotRepository>
+    </distributionManagement>
 
 </project>

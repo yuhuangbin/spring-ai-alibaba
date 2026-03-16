@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ package com.alibaba.cloud.ai.graph.executor;
 import com.alibaba.cloud.ai.graph.GraphRunnerContext;
 import com.alibaba.cloud.ai.graph.GraphResponse;
 import com.alibaba.cloud.ai.graph.NodeOutput;
+import com.alibaba.cloud.ai.graph.checkpoint.BaseCheckpointSaver;
+
 import reactor.core.publisher.Flux;
 
 import java.util.HashMap;
@@ -53,7 +55,7 @@ public abstract class BaseGraphExecutor {
 			try {
 				if (context.getCompiledGraph().compileConfig.releaseThread()
 						&& context.getCompiledGraph().compileConfig.checkpointSaver().isPresent()) {
-					com.alibaba.cloud.ai.graph.checkpoint.BaseCheckpointSaver.Tag tag = context
+					BaseCheckpointSaver.Tag tag = context
 						.getCompiledGraph().compileConfig.checkpointSaver()
 						.get()
 						.release(context.getConfig());

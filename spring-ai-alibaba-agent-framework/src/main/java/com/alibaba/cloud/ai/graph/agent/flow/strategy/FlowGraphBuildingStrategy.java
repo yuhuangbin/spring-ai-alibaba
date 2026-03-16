@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import com.alibaba.cloud.ai.graph.agent.flow.builder.FlowGraphBuilder;
 import com.alibaba.cloud.ai.graph.exception.GraphStateException;
 import com.alibaba.cloud.ai.graph.KeyStrategy;
 import com.alibaba.cloud.ai.graph.KeyStrategyFactory;
+import com.alibaba.cloud.ai.graph.internal.node.SubCompiledGraphNode;
 import com.alibaba.cloud.ai.graph.state.strategy.AppendStrategy;
 import com.alibaba.cloud.ai.graph.state.strategy.ReplaceStrategy;
 
@@ -96,7 +97,7 @@ public interface FlowGraphBuildingStrategy {
 				}
 			}
 
-			keyStrategyMap.put("messages", new AppendStrategy());
+			keyStrategyMap.put("messages", new AppendStrategy(false));
 
 			return keyStrategyMap;
 		};
@@ -112,6 +113,9 @@ public interface FlowGraphBuildingStrategy {
 		if (agent instanceof ReactAgent reactAgent) {
 			// ReactAgent: only handle outputKey
 			processOutputKey(reactAgent.getOutputKey(), reactAgent.getOutputKeyStrategy(), keyStrategyMap, defaultStrategy);
+		} else if (agent instanceof BaseAgent baseAgent) {
+			// BaseAgent (e.g. AgentScopeAgent): handle outputKey
+			processOutputKey(baseAgent.getOutputKey(), baseAgent.getOutputKeyStrategy(), keyStrategyMap, defaultStrategy);
 		} else if (agent instanceof FlowAgent flowAgent) {
 			// FlowAgent: recursively process sub-agents
 			if (flowAgent.subAgents() != null) {
@@ -141,7 +145,7 @@ public interface FlowGraphBuildingStrategy {
 
 	static void addSubAgentNode(Agent subAgent, StateGraph newGraph) throws GraphStateException {
 		if (subAgent instanceof FlowAgent flowAgent) {
-			newGraph.addNode(flowAgent.name(), flowAgent.asStateGraph());
+			newGraph.addNode(flowAgent.name(), new SubCompiledGraphNode(flowAgent.name(), flowAgent.getAndCompileGraph()));
 		} else if (subAgent instanceof BaseAgent baseAgent) {
 			newGraph.addNode(baseAgent.name(), baseAgent.asNode(baseAgent.isIncludeContents(), baseAgent.isReturnReasoningContents()));
 		} else {

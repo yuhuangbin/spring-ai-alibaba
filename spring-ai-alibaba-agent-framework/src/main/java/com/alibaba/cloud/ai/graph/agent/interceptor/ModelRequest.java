@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,10 @@ package com.alibaba.cloud.ai.graph.agent.interceptor;
 
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
-import org.springframework.ai.chat.prompt.ChatOptions;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
+import org.springframework.ai.tool.ToolCallback;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,14 +33,24 @@ public class ModelRequest {
 	private final SystemMessage systemMessage;
 	private final Map<String, Object> context;
 	private final List<Message> messages;
-	private final ChatOptions options;
+	private final ToolCallingChatOptions options;
+	// tools working for current request, leave it to empty if all default in options should be used.
 	private final List<String> tools;
+	// dynamic tool callbacks for current request.
+	private final List<ToolCallback> dynamicToolCallbacks;
 
-	public ModelRequest(SystemMessage systemMessage, List<Message> messages, ChatOptions options, List<String> tools, Map<String, Object> context) {
+	// tool descriptions for tool selection, mapping tool name to description.
+	private final Map<String, String> toolDescriptions;
+
+	public ModelRequest(SystemMessage systemMessage, List<Message> messages, ToolCallingChatOptions options,
+			List<String> tools, List<ToolCallback> dynamicToolCallbacks, Map<String, String> toolDescriptions,
+			Map<String, Object> context) {
 		this.systemMessage = systemMessage;
 		this.messages = messages;
 		this.options = options;
 		this.tools = tools;
+		this.dynamicToolCallbacks = dynamicToolCallbacks;
+		this.toolDescriptions = toolDescriptions;
 		this.context = context;
 	}
 
@@ -48,9 +60,12 @@ public class ModelRequest {
 
 	public static Builder builder(ModelRequest request) {
 		return new Builder()
+				.systemMessage(request.systemMessage)
 				.messages(request.messages)
 				.options(request.options)
 				.tools(request.tools)
+				.dynamicToolCallbacks(request.dynamicToolCallbacks)
+				.toolDescriptions(request.toolDescriptions)
 				.context(request.context);
 	}
 
@@ -62,12 +77,20 @@ public class ModelRequest {
 		return systemMessage;
 	}
 
-	public ChatOptions getOptions() {
+	public ToolCallingChatOptions getOptions() {
 		return options;
 	}
 
 	public List<String> getTools() {
 		return tools;
+	}
+
+	public List<ToolCallback> getDynamicToolCallbacks() {
+		return dynamicToolCallbacks;
+	}
+
+	public Map<String, String> getToolDescriptions() {
+		return toolDescriptions;
 	}
 
 	public Map<String, Object> getContext() {
@@ -77,9 +100,13 @@ public class ModelRequest {
 	public static class Builder {
 		private SystemMessage systemMessage;
 		private List<Message> messages;
-		private ChatOptions options;
-		private List<String> tools;
-		private Map<String, Object> context;
+		private ToolCallingChatOptions options;
+		private List<String> tools = List.of();
+		private List<ToolCallback> dynamicToolCallbacks = List.of();
+
+		private Map<String, String> toolDescriptions = new HashMap<>();
+
+		private Map<String, Object> context = new HashMap<>();
 
 		public Builder systemMessage(SystemMessage systemMessage) {
 			this.systemMessage = systemMessage;
@@ -91,23 +118,42 @@ public class ModelRequest {
 			return this;
 		}
 
-		public Builder options(ChatOptions options) {
+		public Builder options(ToolCallingChatOptions options) {
 			this.options = options;
 			return this;
 		}
 
 		public Builder tools(List<String> tools) {
-			this.tools = tools;
+			if (tools != null) {
+				this.tools = new ArrayList<>(tools);
+			}
+			return this;
+		}
+
+		public Builder dynamicToolCallbacks(List<ToolCallback> dynamicToolCallbacks) {
+			if (dynamicToolCallbacks != null) {
+				this.dynamicToolCallbacks = new ArrayList<>(dynamicToolCallbacks);
+			}
+			return this;
+		}
+
+		public Builder toolDescriptions(Map<String, String> toolDescriptions) {
+			if (toolDescriptions != null) {
+				this.toolDescriptions = new HashMap<>(toolDescriptions);
+			}
 			return this;
 		}
 
 		public Builder context(Map<String, Object> context) {
-			this.context = new HashMap<>(context);
+			if (context != null) {
+				this.context = new HashMap<>(context);
+			}
 			return this;
 		}
 
 		public ModelRequest build() {
-			return new ModelRequest(systemMessage, messages, options, tools, context);
+			return new ModelRequest(systemMessage, messages, options, tools, dynamicToolCallbacks, toolDescriptions,
+					context);
 		}
 	}
 }

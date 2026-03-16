@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,15 @@
  */
 package com.alibaba.cloud.ai.agent.studio.config;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-@Configuration
+@Configuration("agentStudioWebConfig")
+@ConditionalOnProperty(prefix = "spring.ai.alibaba.agent.studio.web.cors", name = "enabled", havingValue = "true",
+		matchIfMissing = true)
 public class WebConfig implements WebMvcConfigurer {
 
 	public WebConfig() {

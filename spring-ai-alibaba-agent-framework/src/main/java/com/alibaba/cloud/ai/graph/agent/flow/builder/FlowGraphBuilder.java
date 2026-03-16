@@ -18,8 +18,9 @@ package com.alibaba.cloud.ai.graph.agent.flow.builder;
 import com.alibaba.cloud.ai.graph.KeyStrategyFactory;
 import com.alibaba.cloud.ai.graph.StateGraph;
 import com.alibaba.cloud.ai.graph.agent.Agent;
-import com.alibaba.cloud.ai.graph.agent.flow.strategy.FlowGraphBuildingStrategyRegistry;
 import com.alibaba.cloud.ai.graph.agent.flow.strategy.FlowGraphBuildingStrategy;
+import com.alibaba.cloud.ai.graph.agent.flow.strategy.FlowGraphBuildingStrategyRegistry;
+import com.alibaba.cloud.ai.graph.agent.hook.Hook;
 import com.alibaba.cloud.ai.graph.exception.GraphStateException;
 import com.alibaba.cloud.ai.graph.serializer.StateSerializer;
 import org.springframework.ai.chat.model.ChatModel;
@@ -43,7 +44,7 @@ public class FlowGraphBuilder {
 	 * @throws GraphStateException if graph construction fails
 	 */
 	public static StateGraph buildGraph(String strategyType, FlowGraphConfig config) throws GraphStateException {
-		FlowGraphBuildingStrategy strategy = FlowGraphBuildingStrategyRegistry.getInstance().getStrategy(strategyType);
+		FlowGraphBuildingStrategy strategy = FlowGraphBuildingStrategyRegistry.getInstance().createStrategy(strategyType);
 		strategy.validateConfig(config);
 		return strategy.buildGraph(config);
 	}
@@ -59,6 +60,8 @@ public class FlowGraphBuilder {
 
 		private Agent rootAgent;
 
+		private Agent mainAgent;
+
 		private List<Agent> subAgents;
 
 		private Map<String, Agent> conditionalAgents;
@@ -66,6 +69,8 @@ public class FlowGraphBuilder {
 		private ChatModel chatModel;
 
 		private StateSerializer stateSerializer;
+
+		private List<Hook> hooks;
 
 		private Map<String, Object> customProperties = new HashMap<>();
 
@@ -88,6 +93,14 @@ public class FlowGraphBuilder {
 
 		public void setStateSerializer(StateSerializer stateSerializer) {
 			this.stateSerializer = stateSerializer;
+		}
+
+		public Agent getMainAgent() {
+			return mainAgent;
+		}
+
+		public void setMainAgent(Agent mainAgent) {
+			this.mainAgent = mainAgent;
 		}
 
 		public Agent getRootAgent() {
@@ -122,6 +135,14 @@ public class FlowGraphBuilder {
 			this.chatModel = chatModel;
 		}
 
+		public List<Hook> getHooks() {
+			return hooks;
+		}
+
+		public void setHooks(List<Hook> hooks) {
+			this.hooks = hooks;
+		}
+
 		// Builder methods
 		public static FlowGraphConfig builder() {
 			return new FlowGraphConfig();
@@ -139,6 +160,17 @@ public class FlowGraphBuilder {
 
 		public FlowGraphConfig rootAgent(Agent agent) {
 			this.rootAgent = agent;
+			return this;
+		}
+
+		/**
+		 * Sets the main agent (e.g. ReactAgent) for supervisor flow. When set, routing
+		 * decisions are taken from this agent's output instead of the built-in LLM.
+		 * @param agent the main agent instance
+		 * @return this config instance for method chaining
+		 */
+		public FlowGraphConfig mainAgent(Agent agent) {
+			this.mainAgent = agent;
 			return this;
 		}
 
@@ -164,6 +196,16 @@ public class FlowGraphBuilder {
 		 */
 		public FlowGraphConfig stateSerializer(StateSerializer stateSerializer) {
 			this.stateSerializer = stateSerializer;
+			return this;
+		}
+
+		/**
+		 * Sets the hooks for the graph.
+		 * @param hooks the list of hooks to use
+		 * @return this config instance for method chaining
+		 */
+		public FlowGraphConfig hooks(List<Hook> hooks) {
+			this.hooks = hooks;
 			return this;
 		}
 

@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202-4EB1BA.svg)](https://www.apache.org/licenses/LICENSE-2.0.html)
 [![CI Status](https://github.com/alibaba/spring-ai-alibaba/workflows/%F0%9F%9B%A0%EF%B8%8F%20Build%20and%20Test/badge.svg)](https://github.com/alibaba/spring-ai-alibaba/actions?query=workflow%3A%22%F0%9F%9B%A0%EF%B8%8F+Build+and+Test%22)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/alibaba/spring-ai-alibaba)
-[![Maven central](https://maven-badges.herokuapp.com/maven-central/com.alibaba.cloud.ai/spring-ai-alibaba/badge.svg)](https://maven-badges.herokuapp.com/maven-central/com.alibaba.cloud.ai/spring-ai-alibaba)
+[![Maven central](https://img.shields.io/maven-central/v/com.alibaba.cloud.ai/spring-ai-alibaba.svg)](https://img.shields.io/maven-central/v/com.alibaba.cloud.ai/spring-ai-alibaba)
 <img alt="gitleaks badge" src="https://img.shields.io/badge/protected%20by-gitleaks-blue">
 
 <html>
@@ -18,21 +18,25 @@
     </h3>
 </html>
 
-## What's Agent Framework
+## Architecture
 
 <p align="center">
-    <img src="./docs/imgs/saa-architecture.png" alt="architecture" style="max-width: 740px; height: 508px" />
+    <img src="./docs/imgs/architecture-new.png" alt="architecture" style="max-width: 740px; height: auto" />
 </p>
 
-Spring AI Alibaba Agent Framework is an agent development framework centered around the design philosophy of **ReactAgent**, enabling developers to build agents with core capabilities such as automatic **Context Engineering** and **Human In The Loop** interaction.
+**Spring AI Alibaba Admin** is a one-stop Agent platform that supports visualized Agent development, observability, evaluation, and MCP management, etc. It also integrates with open-source low-code platforms like Dify, enabling rapid migration from DSL to Spring AI Alibaba project.
 
-For scenarios requiring more complex process control, Agent Framework offers built-in workflows like `SequentialAgent`, `ParallelAgent`, `RoutingAgent`, and `LoopAgent` based on its **Graph Runtime**. Developers can also flexibly orchestrate more complex workflows using the Graph API.
+**Spring AI Alibaba Agent Framework** is an agent development framework that can quickly develop agents with builtin **Context Engineering** and **Human In The Loop** support. For scenarios requiring more complex process control, Agent Framework offers built-in workflows like `SequentialAgent`, `ParallelAgent`, `RoutingAgent`, `LoopAgent`.
+
+**Spring AI Alibaba Graph** serves as the underlying runtime of the Agent Framework, providing essential capabilities such as persistence, workflow orchestration, and streaming required for long-running stateful agents. Compared to the Agent Framework, users can build more flexible multi-agent workflows based on the Graph API.
 
 ## Core Features
 
-* **[ReactAgent](https://java2ai.com/docs/frameworks/agent-framework/tutorials/agents)**: Build intelligent agents with reasoning and acting capabilities, following the ReAct (Reasoning + Acting) paradigm for iterative problem-solving.
+* **[Multi-Agent Orchestration](https://github.com/alibaba/spring-ai-alibaba/tree/main/examples/multiagent-patterns)**: Compose multiple agents with built-in patterns including `SequentialAgent`, `ParallelAgent`, `RoutingAgent`, and `LoopAgent` for complex task execution.
 
-* **[Multi-Agent Orchestration](https://java2ai.com/docs/frameworks/agent-framework/advanced/multi-agent)**: Compose multiple agents with built-in patterns including `SequentialAgent`, `ParallelAgent`, `LlmRoutingAgent`, and `LoopAgent` for complex task execution.
+* **[Multimodal Support](https://github.com/alibaba/spring-ai-alibaba/tree/main/examples/multimodal)**: ReactAgent with text and media input (image understanding). ReactAgent with tool based image or audio generation.
+
+* **[Voice Agent](https://github.com/alibaba/spring-ai-alibaba/tree/main/examples/voice-agent)**: WebSocket-based real-time voice agent that supports streaming audio or text input and responds with generated audio.
 
 * **[Context Engineering](https://java2ai.com/docs/frameworks/agent-framework/tutorials/hooks)**: Built-in best practices for context engineering policies to improve agent reliability and performance, including human-in-the-loop, context compaction, context editing, model & tool call limit, tool retry, planning, dynamic tool selection.
 
@@ -40,7 +44,13 @@ For scenarios requiring more complex process control, Agent Framework offers bui
 
 * **[A2A Support](https://java2ai.com/docs/frameworks/agent-framework/advanced/a2a)**: Agent-to-Agent communication support with Nacos integration, enabling distributed agent coordination and collaboration across services.
 
-* **[Rich Model, Tool and MCP Support](https://java2ai.com/ecosystem/spring-ai/models/dashScope)**: Leveraging core concepts of Spring AI, supports multiple LLM providers (DashScope, OpenAI, etc.), tool calling, and Model Context Protocol (MCP).
+* **[Rich Model, Tool and MCP Support](https://java2ai.com/integration/chatmodels/dashScope)**: Leveraging core concepts of Spring AI, supports multiple LLM providers (DashScope, OpenAI, etc.), tool calling, and Model Context Protocol (MCP).
+
+* **[One-stop Agent Platform](https://java2ai.com/ecosystem/admin/quick-start)**: Build agent in a visualized way, deploy agent without code or export as a standalone java project.
+
+<p align="center">
+    <img src="./docs/imgs/saa-admin.png" alt="architecture" style="max-width: 740px; height: auto" />
+</p>
 
 ## Getting Started
 
@@ -56,20 +66,21 @@ There's a ChatBot example provided by the community at [examples/chatbot](https:
 1. Download the code.
 
 	```shell
-	git clone https://github.com/alibaba/spring-ai-alibaba.git
-	cd examples/chatbot
+	git clone --depth=1 https://github.com/alibaba/spring-ai-alibaba.git
+	cd spring-ai-alibaba
 	```
 
 2. Start the ChatBot.
 
-	Before start, set API-KEY firat (visit <a href="https://bailian.console.aliyun.com/?apiKey=1&tab=api#/api" target="_blank">Aliyun Bailian</a> to get API-KEY):
+	Before starting, set API-KEY first (visit <a href="https://bailian.console.aliyun.com/?apiKey=1&tab=api#/api" target="_blank">Aliyun Bailian</a> to get API-KEY):
 	```shell
 	# this example uses 'spring-ai-alibaba-starter-dashscope', visit https://java2ai.com to learn how to use OpenAI/DeepSeek.
 	export AI_DASHSCOPE_API_KEY=your-api-key
 	```
 	
 	```shell
-	mvn spring-boot:run
+	# Maven installation is optional when using mvnw.
+	./mvnw -pl examples/chatbot spring-boot:run
 	```
 
 3. Chat with ChatBot.
@@ -77,47 +88,32 @@ There's a ChatBot example provided by the community at [examples/chatbot](https:
 	Open the browser and visit [http://localhost:8080/chatui/index.html](http://localhost:8080/chatui/index.html) to chat with the ChatBot.
 	
 <p align="center">
-	<img src="./docs/imgs/chatbot-chat-ui.gif" alt="chatbot-ui" style="max-width: 740px; height: 508px" />
+	<img src="./docs/imgs/chatbot-chat-ui.gif" alt="chatbot-ui" style="max-width: 740px; height: auto" />
 </p>
 
-### Chatbot Code Explained
+## Chatbot Code Explained
 
-1. Add dependencies.
+1. Add dependencies
 
 	```xml
 	<dependencies>
 	  <dependency>
 	    <groupId>com.alibaba.cloud.ai</groupId>
 	    <artifactId>spring-ai-alibaba-agent-framework</artifactId>
-	    <version>1.1.0.0-M5</version>
+	    <version>1.1.2.0</version>
 	  </dependency>
 	  <!-- Assume you are going to use DashScope Model. Refer to docs for how to choose model.-->
 	  <dependency>
 	    <groupId>com.alibaba.cloud.ai</groupId>
 	    <artifactId>spring-ai-alibaba-starter-dashscope</artifactId>
-	    <version>1.1.0.0-M5</version>
+	    <version>1.1.2.1</version>
 	  </dependency>
 	</dependencies>
 	```
 
-2. Create ChatBot agent
-
-	```java
-	ReactAgent chatBotAgent =
-		 ReactAgent.builder()
-			.name("SAA")
-			.model(chatModel)
-			.instruction(INSTRUCTION)
-			.enableLogging(true)
-			.tools(
-				executeShellCommand,
-				executePythonCode,
-				viewTextFile
-			)
-			.build();
-	
-	AssistantMessage message = writerAgent.call("斐波那契数列的第6个数是？");
-	```
+2. Define Chatbot
+   
+	For more details of how to write a Chatbot, please check the [Quick Start](https://java2ai.com/docs/quick-start) on our official website.
 
 ## 📚 Documentation
 * [Overview](https://java2ai.com/docs/overview) - High level overview of the framework
@@ -128,13 +124,13 @@ There's a ChatBot example provided by the community at [examples/chatbot](https:
 
 ## Project Structure
 
-This project consists of three core components:
+This project consists of several core components:
 
-* **Agent Framework**: A ReactAgent-based development framework designed for building intelligent agents with built-in context engineering best practices. For scenarios requiring more complex flow control, the Agent Framework leverages the underlying Graph runtime to provide orchestration capabilities, supporting SequentialAgent, ParallelAgent, LoopAgent, RoutingAgent, and more. Developers can also use the Graph API to flexibly orchestrate their own workflows.
-
-* **Graph**: The underlying runtime for Agent Framework. We recommend developers to use Agent Framework but it's totally fine to use the Graph API directly. Graph is a low-level workflow and multi-agent orchestration framework that enables developers to implement complex application orchestration. Inspired by LangGraph, it features a rich set of prebuilt nodes and simplified Graph State definitions, making it easier to integrate with low-code platforms and implement popular multi-agent patterns.
-
-* **Spring Boot Starters**: Starters integrating Agent Framework with Nacos to provide A2A and dynamic config features.
+* spring-ai-alibaba-agent-framework: A multi-agent framework designed for building intelligent agents with built-in context engineering best practices.
+* spring-ai-alibaba-graph: The underlying runtime for Agent Framework. We recommend developers to use Agent Framework but it's totally fine to use the Graph API directly.
+* spring-ai-alibaba-admin: A one-stop Agent platform that supports visualized Agent development, observability, evaluation, and MCP management, etc.
+* spring-ai-alibaba-studio: The embedded ui for quickly debugging agent in a visualized way.
+* spring-boot-starters: Starters integrating Agent Framework with Nacos to provide A2A and dynamic config features.
 
 ## Spring AI Alibaba Ecosystem
  Repository | Description | ⭐
@@ -152,7 +148,11 @@ This project consists of three core components:
 * Dingtalk Group (钉钉群), search `130240015687` and join.
 * WeChat Group (微信公众号), scan the QR code below and follow us.
 
-<img src="./docs/imgs/wechat-account.jpg" style="width:260px;"/>
+<img src="./docs/imgs/wechat-account.jpg" style="width: 260px; height: auto"/>
+
+## Resources
+* [AI-Native Application Architecture White Paper](https://developer.aliyun.com/ebook/8479)：Co-authored by 40 frontline engineers and endorsed by 15 industry experts, this 200,000+ word white paper is the first comprehensive guide dedicated to the full DevOps lifecycle of AI-native applications. It systematically breaks down core concepts and key challenges, offering practical problem-solving approaches and architectural insights.
+
 
 ## Star History
 

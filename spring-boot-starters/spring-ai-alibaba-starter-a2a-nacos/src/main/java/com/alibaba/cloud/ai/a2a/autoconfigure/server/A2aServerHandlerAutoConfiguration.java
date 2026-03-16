@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 package com.alibaba.cloud.ai.a2a.autoconfigure.server;
 
 import com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerProperties;
+import com.alibaba.cloud.ai.a2a.core.route.MultiAgentRequestRouter;
 import com.alibaba.cloud.ai.graph.agent.Agent;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.agent.a2a.A2aRemoteAgent;
@@ -48,13 +49,17 @@ import io.a2a.server.tasks.TaskStore;
 import io.a2a.spec.AgentCard;
 
 /**
- * A2A server handler autoconfiguration.
+ * A2A server handler auto-configuration for single-agent mode.
+ * <p>
+ * This configuration is skipped when multi-agent mode is active
+ * (when {@link MultiAgentRequestRouter} bean exists).
  *
  * @author xiweng.yy
  */
-@AutoConfiguration(after = A2aServerAgentCardAutoConfiguration.class)
+@AutoConfiguration(after = { A2aServerAgentCardAutoConfiguration.class, A2aServerMultiAgentAutoConfiguration.class })
 @EnableConfigurationProperties({ A2aServerProperties.class })
 @ConditionalOnBean({ AgentCard.class, Agent.class })
+@ConditionalOnMissingBean(MultiAgentRequestRouter.class)
 public class A2aServerHandlerAutoConfiguration {
 
 	@Bean

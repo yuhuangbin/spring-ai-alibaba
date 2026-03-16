@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package com.alibaba.cloud.ai.agent.nacos;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -54,6 +55,8 @@ public class NacosReactAgentBuilder extends NacosAgentPromptBuilder {
 
 	NacosContextHolder agentVOHolder = new NacosContextHolder();
 	private NacosOptions nacosOptions;
+	
+	private List<ToolCallback> localTools = new ArrayList<>();
 
 	public NacosReactAgentBuilder nacosOptions(NacosOptions nacosOptions) {
 		this.nacosOptions = nacosOptions;
@@ -72,7 +75,7 @@ public class NacosReactAgentBuilder extends NacosAgentPromptBuilder {
 		//2.load prompt vo
 		PromptVO promptVO = getPromptByKey(nacosOptions, agentVO.getPromptKey());
 		agentVOHolder.setPromptVO(promptVO);
-		this.instruction = promptVO.getTemplate();
+		String systemPrompt = promptVO.getTemplate();
 
 		//3.load model vo
 		ModelVO modelVO = NacosModelInjector.getModelByAgentName(nacosOptions);
@@ -96,22 +99,31 @@ public class NacosReactAgentBuilder extends NacosAgentPromptBuilder {
 		}
 
 		clientBuilder.defaultOptions(chatOptions);
-		clientBuilder.defaultSystem(instruction);
 		chatClient = clientBuilder.build();
 
 		//6.load mcp servers
 		McpServersVO mcpServersVO = NacosMcpToolsInjector.getMcpServersVO(nacosOptions);
 		agentVOHolder.setMcpServersVO(mcpServersVO);
-
-		this.tools = convert(nacosOptions, mcpServersVO);
-
+		
+		separateInterceptorsByType();
+		
+		List<ToolCallback> allTools = new ArrayList<>();
+		this.localTools = gatherLocalTools();
+		List<ToolCallback> mcpTools = convert(nacosOptions, mcpServersVO);
+		allTools.addAll(localTools);
+		if (mcpTools != null) {
+			allTools.addAll(mcpTools);
+		}
+		
 		//7. build tools
-		AgentLlmNode.Builder llmNodeBuilder = AgentLlmNode.builder().chatClient(chatClient);
+		AgentLlmNode.Builder llmNodeBuilder = AgentLlmNode.builder()
+				.chatClient(chatClient)
+				.systemPrompt(systemPrompt);
 		if (outputKey != null && !outputKey.isEmpty()) {
 			llmNodeBuilder.outputKey(outputKey);
 		}
-		if (CollectionUtils.isNotEmpty(tools)) {
-			llmNodeBuilder.toolCallbacks(tools);
+		if (CollectionUtils.isNotEmpty(allTools)) {
+			llmNodeBuilder.toolCallbacks(allTools);
 		}
 		AgentLlmNode llmNode = llmNodeBuilder.build();
 
@@ -125,15 +137,13 @@ public class NacosReactAgentBuilder extends NacosAgentPromptBuilder {
 		}
 		AgentToolNode toolNode;
 		if (resolver != null) {
-			toolNode = builder.toolCallbackResolver(resolver).build();
+			builder.toolCallbackResolver(resolver);
 		}
-		else if (tools != null) {
-			toolNode = builder.toolCallbacks(tools).build();
+		if (CollectionUtils.isNotEmpty(allTools)) {
+			builder.toolCallbacks(allTools);
 		}
-		else {
-			toolNode = builder.build();
-		}
-
+		toolNode = builder.build();
+		
 		// register listeners.
 
 		//register model  listener
@@ -158,10 +168,13 @@ public class NacosReactAgentBuilder extends NacosAgentPromptBuilder {
 						@Override
 						public void receiveConfigInfo(String configInfo) {
 							McpServersVO mcpServersVO = JSON.parseObject(configInfo, McpServersVO.class);
-							List<ToolCallback> toolCallbacks = convert(nacosOptions, mcpServersVO);
-							if (toolCallbacks != null) {
-								toolNode.setToolCallbacks(toolCallbacks);
-								llmNode.setToolCallbacks(toolCallbacks);
+							List<ToolCallback> mcpTools = convert(nacosOptions, mcpServersVO);
+							if (mcpTools != null) {
+								List<ToolCallback> allTools = new ArrayList<>();
+								allTools.addAll(localTools);
+								allTools.addAll(mcpTools);
+								toolNode.setToolCallbacks(allTools);
+								llmNode.setToolCallbacks(allTools);
 							}
 
 						}
@@ -304,7 +317,7 @@ class PromptListener extends AbstractListener {
 		if (promptVO != null && promptVO.getTemplate() != null) {
 			nacosContextHolder.getObservationMetadataAwareOptions().getObservationMetadata()
 					.putAll(getMetadata(promptVO));
-			reactAgent.setInstruction(promptVO.getTemplate());
+			reactAgent.setSystemPrompt(promptVO.getTemplate());
 		}
 
 	}
@@ -341,7 +354,7 @@ class AgentBaseListener extends AbstractListener {
 			PromptVO newPromptVO = getPromptByKey(nacosOptions, newPromptKey);
 			nacosContextHolder.getObservationMetadataAwareOptions().getObservationMetadata()
 					.putAll(getMetadata(newPromptVO));
-			nacosContextHolder.getReactAgent().setInstruction(newPromptVO.getTemplate());
+			nacosContextHolder.getReactAgent().setSystemPrompt(newPromptVO.getTemplate());
 
 			NacosReactAgentBuilder.registerPromptListener(nacosOptions, nacosContextHolder, newPromptKey, nacosContextHolder.getReactAgent());
 		}

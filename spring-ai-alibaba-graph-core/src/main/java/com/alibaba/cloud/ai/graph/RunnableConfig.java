@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,11 +19,12 @@ import com.alibaba.cloud.ai.graph.action.InterruptionMetadata;
 import com.alibaba.cloud.ai.graph.internal.node.ParallelNode;
 import com.alibaba.cloud.ai.graph.store.Store;
 
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executor;
 
 import static java.lang.String.format;
@@ -38,10 +39,31 @@ import static java.util.Optional.ofNullable;
  */
 public final class RunnableConfig implements HasMetadata<RunnableConfig.Builder> {
 
+	public static final String AGENT_MODEL_NAME = "_AGENT_MODEL_";
+	public static final String AGENT_TOOL_NAME = "_AGENT_TOOL_";
+	public static final String AGENT_HOOK_NAME_PREFIX = "_AGENT_HOOK_";
+
+	public static final String AGENT_NAME_KEY = "_AGENT_";
+
 	public static final String HUMAN_FEEDBACK_METADATA_KEY = "HUMAN_FEEDBACK";
+
 	public static final String STATE_UPDATE_METADATA_KEY = "STATE_UPDATE";
-	public static final String AGENT_NAME = "AGENT_NAME";
 	public static final String DEFAULT_PARALLEL_EXECUTOR_KEY = "_DEFAULT_PARALLEL_EXECUTOR_";
+	public static final String DEFAULT_PARALLEL_AGGREGATION_STRATEGY_KEY = "_DEFAULT_PARALLEL_AGGREGATION_STRATEGY_";
+
+	/**
+	 * Metadata key for dynamic tool callbacks ({@code List<org.springframework.ai.tool.ToolCallback>}).
+	 * Used internally by AgentLlmNode and AgentToolNode during ReactAgent inference (e.g. when
+	 * ModelInterceptor adds tools via dynamicToolCallbacks). Not part of the public API.
+	 */
+	public static final String DYNAMIC_TOOL_CALLBACKS_METADATA_KEY = "_DYNAMIC_TOOL_CALLBACKS_";
+
+	/**
+	 * Metadata key for enabling merge of reasoning content in streamed assistant message
+	 * metadata. When set to {@link Boolean#TRUE}, last and current chunk metadata (including
+	 * reasoning content) are merged; otherwise only current message metadata is used.
+	 */
+	public static final String MERGE_REASONING_CONTENT_METADATA_KEY = "_MERGE_REASONING_CONTENT_";
 
 	private final String threadId;
 
@@ -58,9 +80,9 @@ public final class RunnableConfig implements HasMetadata<RunnableConfig.Builder>
 	 * Comparing to metadata, context is mutable during execution. It passes information between nodes.
 	 * Different from OverAllState, context is specific to a run, it will not be persisted.
 	 */
-	private final Map<String, Object> context;
+	private final ConcurrentMap<String, Object> context;
 
-	private Store store;
+	private final Store store;
 
 	private final Map<String, Object> interruptedNodes;
 
@@ -74,7 +96,7 @@ public final class RunnableConfig implements HasMetadata<RunnableConfig.Builder>
 		this.checkPointId = builder.checkPointId;
 		this.nextNode = builder.nextNode;
 		this.streamMode = builder.streamMode;
-		this.metadata = ofNullable(builder.metadata()).map(Map::copyOf).orElse(null);
+		this.metadata = ofNullable(builder.metadata()).map(HashMap::new).orElse(null);
 		this.interruptedNodes = new ConcurrentHashMap<>();
 		this.store = builder.store;
 		this.context = builder.context;
@@ -190,6 +212,40 @@ public final class RunnableConfig implements HasMetadata<RunnableConfig.Builder>
 	}
 
 	/**
+	 * Returns a new RunnableConfig that copies this config and adds
+	 * {@link #HUMAN_FEEDBACK_METADATA_KEY} with value {@code "placeholder"} to metadata.
+	 * Used when building a config for resuming a run (e.g. after human feedback is
+	 * collected and the graph is continued).
+	 * @return a new RunnableConfig with human feedback placeholder metadata
+	 */
+	public RunnableConfig withResume() {
+		return RunnableConfig.builder(this)
+				.addMetadata(HUMAN_FEEDBACK_METADATA_KEY, "placeholder")
+				.build();
+	}
+
+	/**
+	 * Returns whether reasoning content in streamed assistant message metadata should be
+	 * merged across chunks. When true, last and current chunk metadata (including
+	 * reasoning content) are merged; when false or unset, only current message metadata
+	 * is used.
+	 * @return true if merge is enabled, false otherwise
+	 */
+	public boolean mergeReasoningContent() {
+		return metadata(MERGE_REASONING_CONTENT_METADATA_KEY).map(v -> Boolean.TRUE.equals(v)).orElse(false);
+	}
+
+	/**
+	 * Returns a new RunnableConfig that copies this config and sets the merge reasoning
+	 * content flag. See {@link #mergeReasoningContent()}.
+	 * @param merge whether to merge reasoning content across streamed chunks
+	 * @return a new RunnableConfig with the given merge flag
+	 */
+	public RunnableConfig withMergeReasoningContent(boolean merge) {
+		return RunnableConfig.builder(this).mergeReasoningContent(merge).build();
+	}
+
+	/**
 	 * Retrieves interrupt data associated with the specified key.
 	 * @param key the key for which to retrieve interrupt data; may be null
 	 * @return an Optional containing the interrupt data if present, or an empty Optional
@@ -206,11 +262,15 @@ public final class RunnableConfig implements HasMetadata<RunnableConfig.Builder>
 	// FIXME, allow modification or not?
 	@Override
 	public Optional<Map<String, Object>> metadata() {
-		return Optional.of(Collections.unmodifiableMap(metadata));
+		return Optional.of(metadata);
 	}
 
 	public Map<String, Object> context() {
 		return context;
+	}
+
+	public void clearContext() {
+		this.context.clear();
 	}
 
 	/**
@@ -225,6 +285,7 @@ public final class RunnableConfig implements HasMetadata<RunnableConfig.Builder>
 		}
 		return ofNullable(metadata).map(m -> m.get(key));
 	}
+
 
 	@Override
 	public String toString() {
@@ -264,7 +325,7 @@ public final class RunnableConfig implements HasMetadata<RunnableConfig.Builder>
 
 		private Store store;
 
-		private Map<String, Object> context;
+		private ConcurrentMap<String, Object> context;
 
 		private CompiledGraph.StreamMode streamMode = CompiledGraph.StreamMode.VALUES;
 
@@ -338,6 +399,28 @@ public final class RunnableConfig implements HasMetadata<RunnableConfig.Builder>
 			return addMetadata(HUMAN_FEEDBACK_METADATA_KEY, humanFeedback);
 		}
 
+		/**
+		 * Adds resume metadata ({@link #HUMAN_FEEDBACK_METADATA_KEY} with value
+		 * {@code "placeholder"}) so the built config is suitable for resuming a run
+		 * (e.g. after human feedback). Equivalent to building and then calling
+		 * {@link RunnableConfig#withResume()}, but allows fluent builder usage.
+		 * @return this builder for chaining
+		 */
+		public Builder resume() {
+			return addMetadata(HUMAN_FEEDBACK_METADATA_KEY, "placeholder");
+		}
+
+		/**
+		 * Enables or disables merging of reasoning content in streamed assistant message
+		 * metadata across chunks. When enabled, last and current chunk metadata (including
+		 * reasoning content) are merged; when disabled, only current message metadata is used.
+		 * @param merge true to enable merge, false to use current message metadata only
+		 * @return this builder for chaining
+		 */
+		public Builder mergeReasoningContent(boolean merge) {
+			return addMetadata(MERGE_REASONING_CONTENT_METADATA_KEY, merge);
+		}
+
 		public Builder addStateUpdate(Map<String, Object> stateUpdate) {
 			return addMetadata(STATE_UPDATE_METADATA_KEY, stateUpdate);
 		}
@@ -349,7 +432,7 @@ public final class RunnableConfig implements HasMetadata<RunnableConfig.Builder>
 		 * When a parallel node is executed, it will look for an executor in the
 		 * {@link RunnableConfig} metadata. If found, it will be used to run the parallel
 		 * branches concurrently.
-		 * @param nodeId the ID of the parallel node.
+		 * @param nodeId the ID of the parallel starting node.
 		 * @param executor the {@link Executor} to use for the parallel node.
 		 * @return this {@code Builder} instance for method chaining.
 		 */
@@ -369,13 +452,42 @@ public final class RunnableConfig implements HasMetadata<RunnableConfig.Builder>
 			return addMetadata(DEFAULT_PARALLEL_EXECUTOR_KEY, requireNonNull(executor, "executor cannot be null!"));
 		}
 
-		public Builder clearContext() {
-			this.context.clear();
-			return this;
+		/**
+		 * Adds an aggregation strategy for a specific parallel node's target node.
+		 * <p>
+		 * This allows you to control how parallel branches are aggregated. When a parallel node
+		 * executes, it will look for an aggregation strategy using the target node ID (the node
+		 * that follows the parallel node). If found, it will use the specified strategy to determine
+		 * whether to wait for all branches (ALL_OF) or proceed with the first completed branch (ANY_OF).
+		 * @param targetNodeId the ID of the merge node (the single node that aggregates results from all parallel branches) that follows the parallel branch nodes.
+		 * @param strategy the {@link NodeAggregationStrategy} to use for aggregation.
+		 * @return this {@code Builder} instance for method chaining.
+		 */
+		public Builder addParallelNodeAggregationStrategy(String targetNodeId, NodeAggregationStrategy strategy) {
+			return addMetadata(ParallelNode.formatTargetNodeId(targetNodeId), 
+					requireNonNull(strategy, "strategy cannot be null!"));
+		}
+
+		/**
+		 * Sets a default aggregation strategy for all parallel nodes.
+		 * <p>
+		 * This strategy will be used for parallel nodes that don't have a specific strategy
+		 * configured via {@link #addParallelNodeAggregationStrategy(String, NodeAggregationStrategy)}.
+		 * @param strategy the {@link NodeAggregationStrategy} to use as the default.
+		 * @return this {@code Builder} instance for method chaining.
+		 */
+		public Builder defaultParallelAggregationStrategy(NodeAggregationStrategy strategy) {
+			return addMetadata(DEFAULT_PARALLEL_AGGREGATION_STRATEGY_KEY, 
+					requireNonNull(strategy, "strategy cannot be null!"));
 		}
 
 		public Builder store(Store store) {
 			this.store = store;
+			return this;
+		}
+
+		public Builder clearContext() {
+			this.context.clear();
 			return this;
 		}
 

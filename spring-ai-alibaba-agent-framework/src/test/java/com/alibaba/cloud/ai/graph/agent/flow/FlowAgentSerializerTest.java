@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import com.alibaba.cloud.ai.graph.agent.flow.agent.LoopAgent;
 import com.alibaba.cloud.ai.graph.agent.flow.agent.ParallelAgent;
 import com.alibaba.cloud.ai.graph.agent.flow.agent.SequentialAgent;
 import com.alibaba.cloud.ai.graph.agent.flow.agent.loop.LoopMode;
+import com.alibaba.cloud.ai.graph.agent.utils.ChatClientTestUtils;
 import com.alibaba.cloud.ai.graph.serializer.StateSerializer;
 import com.alibaba.cloud.ai.graph.serializer.plain_text.jackson.SpringAIJacksonStateSerializer;
 import com.alibaba.cloud.ai.graph.serializer.std.SpringAIStateSerializer;
@@ -50,6 +51,7 @@ class FlowAgentSerializerTest {
 	@BeforeEach
 	void setUp() {
 		MockitoAnnotations.openMocks(this);
+		ChatClientTestUtils.stubChatClientMutateChain(chatClient);
 	}
 
 	/**

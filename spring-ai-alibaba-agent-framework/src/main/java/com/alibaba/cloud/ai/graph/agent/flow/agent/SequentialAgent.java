@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,8 +23,8 @@ import com.alibaba.cloud.ai.graph.exception.GraphStateException;
 
 public class SequentialAgent extends FlowAgent {
 
-	protected SequentialAgent(SequentialAgentBuilder builder) throws GraphStateException {
-		super(builder.name, builder.description, builder.compileConfig, builder.subAgents, builder.stateSerializer, builder.executor);
+	protected SequentialAgent(SequentialAgentBuilder builder) {
+		super(builder.name, builder.description, builder.compileConfig, builder.subAgents, builder.stateSerializer, builder.executor, builder.hooks);
 	}
 
 	public static SequentialAgentBuilder builder() {
@@ -54,7 +54,7 @@ public class SequentialAgent extends FlowAgent {
 		}
 
 		@Override
-		public SequentialAgent doBuild() throws GraphStateException {
+		public SequentialAgent doBuild() {
 			validate();
 			return new SequentialAgent(this);
 		}

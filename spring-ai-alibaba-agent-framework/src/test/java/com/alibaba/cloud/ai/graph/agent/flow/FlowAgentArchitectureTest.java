@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import com.alibaba.cloud.ai.graph.agent.flow.enums.FlowAgentEnum;
 import com.alibaba.cloud.ai.graph.agent.flow.strategy.FlowGraphBuildingStrategy;
 import com.alibaba.cloud.ai.graph.agent.flow.strategy.FlowGraphBuildingStrategyRegistry;
 import com.alibaba.cloud.ai.graph.agent.flow.strategy.SequentialGraphBuildingStrategy;
+import com.alibaba.cloud.ai.graph.agent.utils.ChatClientTestUtils;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
@@ -63,6 +64,7 @@ class FlowAgentArchitectureTest {
 	@BeforeEach
 	void setUp() {
 		MockitoAnnotations.openMocks(this);
+		ChatClientTestUtils.stubChatClientMutateChain(chatClient);
 	}
 
 	@Test

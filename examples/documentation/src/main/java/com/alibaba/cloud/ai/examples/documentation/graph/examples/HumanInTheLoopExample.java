@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -299,8 +299,11 @@ public class HumanInTheLoopExample {
 	 * 继续执行 Graph（interruptBefore 模式）
 	 */
 	public static void continueExecutionWithInterruptBefore(CompiledGraph graph, RunnableConfig updateConfig) {
+		// 添加恢复执行的元数据标记
+		RunnableConfig resumeConfig = updateConfig.withResume();
+
 		// 继续执行 Graph（input 为 null，使用之前的状态）
-		graph.stream(null, updateConfig)
+		graph.stream(null, resumeConfig)
 				.doOnNext(event -> System.out.println(event))
 				.doOnError(error -> System.err.println("流错误: " + error.getMessage()))
 				.doOnComplete(() -> System.out.println("流完成"))
@@ -328,8 +331,11 @@ public class HumanInTheLoopExample {
 	 * 继续执行直到完成（interruptBefore 模式）
 	 */
 	public static void continueExecutionUntilComplete(CompiledGraph graph, RunnableConfig updateConfig) {
+		// 添加恢复执行的元数据标记
+		RunnableConfig resumeConfig = updateConfig.withResume();
+
 		// 继续执行 Graph
-		graph.stream(null, updateConfig)
+		graph.stream(null, resumeConfig)
 				.doOnNext(event -> System.out.println(event))
 				.doOnError(error -> System.err.println("流错误: " + error.getMessage()))
 				.doOnComplete(() -> System.out.println("流完成"))

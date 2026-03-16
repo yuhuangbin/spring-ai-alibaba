@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,8 @@ import java.io.IOException;
 
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.type.WritableTypeId;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializerProvider;
@@ -36,7 +38,8 @@ public interface AgentInstructionMessageHandler {
 
 	enum Field {
 
-		TEXT("text");
+		TEXT("text"),
+		RENDERED("rendered");
 
 		final String name;
 
@@ -55,15 +58,21 @@ public interface AgentInstructionMessageHandler {
 		@Override
 		public void serialize(AgentInstructionMessage msg, JsonGenerator gen, SerializerProvider provider) throws IOException {
 			gen.writeStartObject();
-			gen.writeStringField("@class", msg.getClass().getName());
-			gen.writeStringField(Field.TEXT.name, msg.getText());
-			serializeMetadata(gen, msg.getMetadata());
+			serializeFields(msg, gen, provider);
 			gen.writeEndObject();
 		}
 
 		@Override
-		public void serializeWithType(AgentInstructionMessage value, JsonGenerator gen, SerializerProvider serializers, TypeSerializer typeSer) throws IOException {
-			serialize(value, gen, serializers);
+		public void serializeWithType(AgentInstructionMessage msg, JsonGenerator gen, SerializerProvider provider, TypeSerializer typeSer) throws IOException {
+			WritableTypeId typeIdDef = typeSer.writeTypePrefix(gen, typeSer.typeId(msg, JsonToken.START_OBJECT));
+			serializeFields(msg, gen, provider);
+			typeSer.writeTypeSuffix(gen, typeIdDef);
+		}
+
+		private void serializeFields(AgentInstructionMessage msg, JsonGenerator gen, SerializerProvider provider) throws IOException {
+			gen.writeStringField(Field.TEXT.name, msg.getText());
+			gen.writeBooleanField(Field.RENDERED.name, msg.isRendered());
+			serializeMetadata(gen, msg.getMetadata());
 		}
 	}
 
@@ -80,8 +89,10 @@ public interface AgentInstructionMessageHandler {
 
 			var text = node.findValue(Field.TEXT.name).asText();
 			var metadata = deserializeMetadata(mapper, node);
+			var renderedNode = node.findValue(Field.RENDERED.name);
+			var rendered = renderedNode != null && renderedNode.asBoolean();
 
-			return AgentInstructionMessage.builder().text(text).metadata(metadata).build();
+			return AgentInstructionMessage.builder().text(text).metadata(metadata).rendered(rendered).build();
 
 		}
 

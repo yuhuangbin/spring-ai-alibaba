@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,8 +25,9 @@ import com.alibaba.cloud.ai.agent.studio.loader.AgentLoader;
 import com.alibaba.cloud.ai.graph.NodeOutput;
 import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.action.InterruptionMetadata;
-import com.alibaba.cloud.ai.graph.agent.BaseAgent;
+import com.alibaba.cloud.ai.graph.agent.Agent;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
+import com.alibaba.cloud.ai.graph.streaming.OutputType;
 import com.alibaba.cloud.ai.graph.streaming.StreamingOutput;
 
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -171,7 +172,7 @@ public class ExecutionController {
 		}
 
 		try {
-			BaseAgent agent = agentLoader.loadAgent(request.appName);
+			Agent agent = agentLoader.loadAgent(request.appName);
 			RunnableConfig runnableConfig = RunnableConfig.builder()
 					.threadId(request.threadId)
 					.addMetadata("user_id", request.userId)
@@ -205,7 +206,7 @@ public class ExecutionController {
 		}
 
 		try {
-			BaseAgent agent = agentLoader.loadAgent(request.appName);
+			Agent agent = agentLoader.loadAgent(request.appName);
 
 			InterruptionMetadata.Builder metadataBuilder = InterruptionMetadata.builder();
 
@@ -247,7 +248,7 @@ public class ExecutionController {
 	}
 
 	@NotNull
-	private Flux<ServerSentEvent<String>> executeAgent(UserMessage userMessage, BaseAgent agent, RunnableConfig runnableConfig) throws GraphRunnerException {
+	private Flux<ServerSentEvent<String>> executeAgent(UserMessage userMessage, Agent agent, RunnableConfig runnableConfig) throws GraphRunnerException {
 
 		Flux<NodeOutput> agentStream;
 
@@ -258,8 +259,12 @@ public class ExecutionController {
 			agentStream = agent.stream("", runnableConfig);
 		}
 
-		// Convert Flux<NodeOutput> to Flux<ServerSentEvent<String>>
-		return agentStream.map(nodeOutput -> {
+		// Skip AGENT_MODEL_FINISHED: it is the framework's aggregation of AGENT_MODEL_STREAMING
+		// chunks; sending it to the frontend would duplicate the final message.
+		return agentStream
+				.filter(nodeOutput -> !(nodeOutput instanceof StreamingOutput<?> so
+						&& so.getOutputType() == OutputType.AGENT_MODEL_FINISHED))
+				.map(nodeOutput -> {
 					String node = nodeOutput.node();
 					String agentName = nodeOutput.agent();
 					Usage tokenUsage = nodeOutput.tokenUsage();

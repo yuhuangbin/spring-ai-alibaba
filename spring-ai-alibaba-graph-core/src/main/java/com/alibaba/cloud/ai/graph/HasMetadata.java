@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -66,6 +66,14 @@ public interface HasMetadata<B extends HasMetadata.Builder<B>> {
 	@Deprecated(forRemoval = true)
 	default Optional<Object> getMetadata(String key) {
 		return metadata(key);
+	};
+
+	default <T> Optional<T> getMetadataAndRemove(String key, TypeRef<T> typeRef) {
+		Optional<T> value = metadata(key, typeRef);
+		if (value.isPresent()) {
+			metadata().ifPresent(m -> m.remove(key));
+		}
+		return value;
 	};
 
 	/**

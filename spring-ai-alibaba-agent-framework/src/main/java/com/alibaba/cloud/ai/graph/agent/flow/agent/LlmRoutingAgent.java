@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,14 +26,32 @@ import org.springframework.ai.chat.model.ChatModel;
 public class LlmRoutingAgent extends FlowAgent {
 
 	private final ChatModel chatModel;
+	private final String fallbackAgent;
+	private final String systemPrompt;
+	private final String instruction;
 
 	protected LlmRoutingAgent(LlmRoutingAgentBuilder builder) {
-		super(builder.name, builder.description, builder.compileConfig, builder.subAgents, builder.stateSerializer, builder.executor);
+		super(builder.name, builder.description, builder.compileConfig, builder.subAgents, builder.stateSerializer, builder.executor, builder.hooks);
 		this.chatModel = builder.chatModel;
+		this.fallbackAgent = builder.fallbackAgent;
+		this.systemPrompt = builder.systemPrompt;
+		this.instruction = builder.instruction;
 	}
 
 	public static LlmRoutingAgentBuilder builder() {
 		return new LlmRoutingAgentBuilder();
+	}
+
+	public String getFallbackAgent() {
+		return fallbackAgent;
+	}
+
+	public String getSystemPrompt() {
+		return systemPrompt;
+	}
+
+	public String getInstruction() {
+		return instruction;
 	}
 
 	@Override
@@ -49,6 +67,9 @@ public class LlmRoutingAgent extends FlowAgent {
 	public static class LlmRoutingAgentBuilder extends FlowAgentBuilder<LlmRoutingAgent, LlmRoutingAgentBuilder> {
 
 		private ChatModel chatModel;
+		private String fallbackAgent;
+		private String systemPrompt;
+		private String instruction;
 
 		/**
 		 * Sets the ChatModel for LLM-based routing decisions.
@@ -57,6 +78,21 @@ public class LlmRoutingAgent extends FlowAgent {
 		 */
 		public LlmRoutingAgentBuilder model(ChatModel chatModel) {
 			this.chatModel = chatModel;
+			return this;
+		}
+
+		public LlmRoutingAgentBuilder fallbackAgent(String fallbackAgent) {
+			this.fallbackAgent = fallbackAgent;
+			return this;
+		}
+
+		public LlmRoutingAgentBuilder systemPrompt(String systemPrompt) {
+			this.systemPrompt = systemPrompt;
+			return this;
+		}
+
+		public LlmRoutingAgentBuilder instruction(String instruction) {
+			this.instruction = instruction;
 			return this;
 		}
 

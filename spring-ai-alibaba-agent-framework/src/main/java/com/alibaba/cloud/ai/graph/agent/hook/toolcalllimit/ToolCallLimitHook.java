@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -92,11 +92,14 @@ public class ToolCallLimitHook extends ModelHook {
 			else if (exitBehavior == ExitBehavior.END) {
 				String message = buildLimitExceededMessage(threadCount, runCount, threadLimit, runLimit, toolName);
 
+				// Do not copy old messages
 				List<Message> messages = new ArrayList<>();
+				// This new message will be appended to the messages list
 				messages.add(new AssistantMessage(message));
 
 				Map<String, Object> updates = new HashMap<>();
 				updates.put("messages", messages);
+				updates.put("jump_to", JumpTo.end);
 				return CompletableFuture.completedFuture(updates);
 			}
 		}

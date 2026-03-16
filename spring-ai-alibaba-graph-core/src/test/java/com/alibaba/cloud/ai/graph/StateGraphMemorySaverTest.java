@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -106,7 +106,7 @@ public class StateGraphMemorySaverTest {
 			.addEdge(START, "agent_1")
 			.addEdge("agent_1", END);
 
-		var saver = new MemorySaver();
+		var saver = MemorySaver.builder().build();
 
 		var compileConfig = CompileConfig.builder()
 			.saverConfig(SaverConfig.builder()
@@ -191,7 +191,7 @@ public class StateGraphMemorySaverTest {
 			.addNode("agent_1", node_async(agent_1))
 			.addConditionalEdges("agent_1", edge_async(shouldContinue), Map.of("next", "agent_1", "exit", END));
 
-		var saver = new VersionedMemorySaver();
+		var saver = VersionedMemorySaver.builder().build();
 
 		var compileConfig = CompileConfig.builder()
 			.saverConfig(SaverConfig.builder()
@@ -265,7 +265,7 @@ public class StateGraphMemorySaverTest {
 			.addConditionalEdges("agent", edge_async(shouldContinue_whether), Map.of("tools", "tools", END, END))
 			.addEdge("tools", "agent");
 
-		var saver = new MemorySaver();
+		var saver = MemorySaver.builder().build();
 
 		var compileConfig = CompileConfig.builder()
 			.saverConfig(SaverConfig.builder()
@@ -306,10 +306,7 @@ public class StateGraphMemorySaverTest {
 			log.info("SNAPSHOT HISTORY:\n{}\n", s);
 		}
 
-		RunnableConfig resumeConfig = RunnableConfig.builder()
-				.threadId("thread_1")
-			.addMetadata(RunnableConfig.HUMAN_FEEDBACK_METADATA_KEY, "placeholder")
-			.build();
+		RunnableConfig resumeConfig = RunnableConfig.builder().threadId("thread_1").resume().build();
 		results = app.stream(null, resumeConfig).collectList().block();
 
 		assertNotNull(results);
@@ -329,10 +326,7 @@ public class StateGraphMemorySaverTest {
 		var toReplay = firstSnapshot.get().config();
 
 		toReplay = app.updateState(toReplay, Map.of("messages", "i'm bartolo"));
-		RunnableConfig toReplayResumeConfig = RunnableConfig.builder(toReplay)
-				.threadId("thread_1")
-			.addMetadata(RunnableConfig.HUMAN_FEEDBACK_METADATA_KEY, "placeholder")
-			.build();
+		RunnableConfig toReplayResumeConfig = toReplay.withResume();
 		results = app.stream(null, toReplayResumeConfig).collectList().block();
 
 		assertNotNull(results);
@@ -355,7 +349,7 @@ public class StateGraphMemorySaverTest {
 			.addConditionalEdges("agent", edge_async(shouldContinue_whether), Map.of("tools", "tools", END, END))
 			.addEdge("tools", "agent");
 
-		var saver = new MemorySaver();
+		var saver = MemorySaver.builder().build();
 
 		var compileConfig = CompileConfig.builder()
 			.saverConfig(SaverConfig.builder().register(saver).build())
@@ -385,9 +379,7 @@ public class StateGraphMemorySaverTest {
 		assertEquals("tools", state.next());
 
 		log.info("RESUME CALL");
-		RunnableConfig resumeConfig = RunnableConfig.builder(runnableConfig)
-			.addMetadata(RunnableConfig.HUMAN_FEEDBACK_METADATA_KEY, "placeholder")
-			.build();
+		RunnableConfig resumeConfig = runnableConfig.withResume();
 		results = app.stream(null, resumeConfig).doOnNext(n -> log.info("{}", n)).collectList().block();
 
 		assertNotNull(results);
@@ -406,7 +398,7 @@ public class StateGraphMemorySaverTest {
 
 		var threadId = "thread_1";
 
-		var saver = new VersionedMemorySaver();
+		var saver = VersionedMemorySaver.builder().build();
 
 		// Check for error
 		var configWithVersion = RunnableConfig.builder().threadId(threadId).build();

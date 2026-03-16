@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ package com.alibaba.cloud.ai.graph;
 
 import com.alibaba.cloud.ai.graph.action.AsyncNodeActionWithConfig;
 import com.alibaba.cloud.ai.graph.state.strategy.AppendStrategy;
-import com.alibaba.cloud.ai.graph.streaming.GraphFlux;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,14 +60,7 @@ public class NodeAfterListenerTest {
 		return AsyncNodeActionWithConfig.node_async((state, config) -> {
 			log.info("Executing streaming node: {}", name);
 			Flux<String> dataFlux = Flux.just("chunk1", "chunk2", "chunk3");
-			GraphFlux<String> graphFlux = GraphFlux.of(
-				name,
-				"messages",
-				dataFlux,
-				chunk -> name + "_" + chunk,
-				chunk -> chunk
-			);
-			return Map.of("stream", graphFlux);
+			return Map.of("stream", dataFlux);
 		});
 	}
 

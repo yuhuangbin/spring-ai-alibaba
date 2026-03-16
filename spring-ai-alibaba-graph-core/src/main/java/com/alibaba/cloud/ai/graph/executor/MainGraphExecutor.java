@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -72,7 +72,7 @@ public class MainGraphExecutor extends BaseGraphExecutor {
 
 			if (context.getCurrentNodeId() != null && context.getConfig().isInterrupted(context.getCurrentNodeId())) {
 				context.getConfig().withNodeResumed(context.getCurrentNodeId());
-				return Flux.just(GraphResponse.done(GraphResponse.done(context.getCurrentStateData())));
+				return Flux.just(GraphResponse.done(context.getCurrentStateData()));
 			}
 
 			if (context.isStartNode()) {
